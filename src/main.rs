@@ -10,6 +10,8 @@ use std::env;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use std::time::{Duration,Instant};
+
 mod hlt;
 
 fn main() {
@@ -31,17 +33,20 @@ fn main() {
     // At this point "game" variable is populated with initial map data.
     // This is a good place to do computationally expensive start-up pre-processing.
     // As soon as you call "ready" function below, the 2 second per turn timer will start.
-    Game::ready("MyRustBot");
+    Game::ready("origin");
 
     game.log.borrow_mut().log(&format!("Successfully created bot! My Player ID is {}. Bot rng seed is {}.", game.my_id.0, rng_seed));
 
     loop {
+        let t_start = Instant::now();
+        
         game.update_frame();
         let me = &game.players[game.my_id.0];
         let game_map = &mut game.game_map;
 
         let mut command_queue: Vec<Command> = Vec::new();
 
+        
         for ship_id in &me.ship_ids {
             let ship = &game.ships[ship_id];
             let cell = game_map.at_entity(ship);
@@ -66,6 +71,12 @@ fn main() {
         }
 
 
+        let mut t_elapsed = t_start.elapsed();
+        let t_elapsed_nanos = t_elapsed.subsec_nanos() as u64;
+        let t_elapsed_ms = t_elapsed.as_secs() * 1000 + t_elapsed_nanos / 1000000;
+
+        game.log.borrow_mut().log(&format!("turn elapsed time: {}", t_elapsed_ms));
+        
         Game::end_turn(&command_queue);
     }
 }
