@@ -45,8 +45,15 @@ enum TaskShortTerm {
     Stationary,
 }
 
-fn schedule( queued: Vec<(usize,Coord,Coord)> ) -> Vec<(usize,Dir)> {
-    unimplemented!();
+fn schedule( queued: Vec<(usize,Coord,Coord)>, map_r: &mapraw::ResourceMap, map_d: &mapraw::DropoffMap, map_u: & mapraw::UnitMap ) -> Vec<(usize,Dir)> {
+
+    let mut ret : Vec<(usize,Dir)> = vec![];
+    
+    for (id,from,to) in queued {
+        
+    }
+    
+    ret
 }
 
 fn add_movement_cmd( shipid: &usize, dir: &Dir, cmd: & mut Vec<String> ) -> Result< (), & 'static str > {
@@ -201,25 +208,27 @@ fn synchronize_player_agents( player_agents: & HashMap<usize,Agent>, update: Vec
     ( ret, removed_agents )
 }
 
-fn plan_strategy( player_agents: & mut HashMap<usize,Agent>, map_r: &mapraw::ResourceMap, map_d: &mapraw::DropoffMap ) {
-    let mut agent_action_change = HashSet::new();
+fn plan_strategy( myid: &usize, player_agents: & mut HashMap<usize,Agent>, map_r: &mapraw::ResourceMap, map_d: &mapraw::DropoffMap, map_u: & mapraw::UnitMap ) {
     
+    let mut agent_action_change = vec![];
+
+    //find agents with mine resource amount below a threshold
     for (id,a) in player_agents.iter() {
         match a.status {
             Idle => {
-                agent_action_change.insert(id);
+                agent_action_change.push(*id);
             },
             _ =>{
                 match a.assigned_mine {
-                    None => { agent_action_change.insert(id); },
+                    None => { agent_action_change.push(*id); },
                     Some(x) => {
                         let (y,x) = (a.pos).0;
                         let resource_count = map_r.get( y, x );
-                        if resource_count <= 100 {
+                        if resource_count <= 75 {
                             let mut rng = rand::thread_rng();
                             let num_gen: f32 = rng.gen();
                             if num_gen < 0.75 {
-                                agent_action_change.insert(id);
+                                agent_action_change.push(*id);
                             }
                         }
                     },
@@ -229,9 +238,62 @@ fn plan_strategy( player_agents: & mut HashMap<usize,Agent>, map_r: &mapraw::Res
     }
 
     //todo: find mining locations and assign to associated agents, update assigned dropoff locations as well
-    
-    
-    unimplemented!();
+    for (dropoff_id,dropoff_pos) in map_d.invmap.get(myid).expect("player id not found for dropoff map").iter() {
+        
+        //trace out a square path and find cells that have halite amount above a threshold
+        
+        let mut p = dropoff_pos;
+        let mut step_stop = 2;
+        let mut p_n = (p.0-1, p.0);
+        let mut step_count = 1;
+        #[derive(Clone,Copy)]
+        enum TraceDir {
+            L,R,U,D
+        }
+        let mut d = TraceDir::L;
+
+        let mut cell_processed = 0;
+        let mut cell_total = 0;
+        while cell_processed < agent_action_change.len() || cell_total >= map_r.dim.0 * map_r.dim.1 - 2 {
+            if step_count >= step_stop {
+                let new_d = { match d {
+                    L => { TraceDir::D },
+                    D => { TraceDir::R },
+                    R => { TraceDir::U },
+                    U => {
+                        step_stop += 1;
+                        p_n.0 -= 1;
+                        TraceDir::L
+                    },
+                } };
+                d = new_d;
+                step_count = 0;
+            }
+            match d {
+                L => { p_n.1 -= 1; },
+                D => { p_n.0 += 1; },
+                R => { p_n.1 += 1; },
+                U => { p_n.0 -= 1; },
+            };
+            step_count += 1;
+            let halite_in_cell = map_r.get( p_n.0, p_n.1 );
+            if halite_in_cell >= 95 {
+                match map_u.get( p_n.0, p_n.1 ) {
+                    mapraw::Unit::None => {
+                        let y = ( p_n.0 % (map_r.dim).0 + (map_r.dim).0 ) % (map_r.dim).0;
+                        let x = ( p_n.1 % (map_r.dim).1 + (map_r.dim).1 ) % (map_r.dim).1;
+                        let a_id = agent_action_change.pop().expect("agent_action empty");
+                        let mut a = player_agents.get_mut(&a_id).expect("agent id not found");
+                        a.assigned_mine = Some( Coord( (y,x) ) );
+                        a.assigned_dropoff = Some( Coord( (dropoff_pos.0,dropoff_pos.1) ) );
+                        cell_processed += 1;
+                    },
+                    _ => {},
+                }
+            }
+            cell_total += 1;
+        }
+    }
 }
 
 fn main() {
@@ -414,7 +476,7 @@ fn main() {
         }
 
         //update macro strategy, assign task to each worker
-        plan_strategy( agents.get_mut(&Player(my_id)).expect("player agent"), &rawmaps.map_r, &rawmaps.map_d );
+        plan_strategy( &my_id, agents.get_mut(&Player(my_id)).expect("player agent"), &rawmaps.map_r, &rawmaps.map_d, &rawmaps.map_u );
         
         //execute agent action
         let mut queued_movements = vec![];
@@ -425,8 +487,8 @@ fn main() {
             });
         }
 
-        //schedule agent movement
-        let movements = schedule( queued_movements );
+        //todo: schedule agent movement
+        let movements = schedule( queued_movements, &rawmaps.map_r, &rawmaps.map_d, &rawmaps.map_u );
 
         //create new worker if necessary
         let create_new_agent = {
