@@ -4,6 +4,8 @@ mod hlt;
 mod mapping;
 mod metric;
 
+use mapping::{mapraw};
+
 use rand::Rng;
 use rand::distributions::{Distribution,Uniform};
 use rand::SeedableRng;
@@ -184,6 +186,38 @@ fn synchronize_player_agents( player_agents: & HashMap<usize,Agent>, update: Vec
     ( ret, removed_agents )
 }
 
+fn plan_strategy( player_agents: & mut HashMap<usize,Agent>, map_r: &mapraw::ResourceMap, map_d: &mapraw::DropoffMap ) {
+    let mut agent_action_change = HashSet::new();
+    
+    for (id,a) in player_agents.iter() {
+        match a.status {
+            Idle => {
+                agent_action_change.insert(id);
+            },
+            _ =>{
+                match a.assigned_mine {
+                    None => { agent_action_change.insert(id); },
+                    Some(x) => {
+                        let (y,x) = (a.pos).0;
+                        let resource_count = map_r.get( y, x );
+                        if resource_count <= 100 {
+                            let mut rng = rand::thread_rng();
+                            let num_gen: f32 = rng.gen();
+                            if num_gen < 0.75 {
+                                agent_action_change.insert(id);
+                            }
+                        }
+                    },
+                }
+            },
+        }
+    }
+
+    //todo: find mining locations and assign to associated agents, update assigned dropoff locations as well
+    
+    unimplemented!();
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let rng_seed: u64 = if args.len() > 1 {
@@ -222,10 +256,10 @@ fn main() {
     let mut players = vec![];
     for _ in 0..num_players {
         input.read_and_parse_line();
-        let my_id : usize = input.next();
+        let player_id : usize = input.next();
         let shipyard_x : i32 = input.next();
         let shipyard_y : i32 = input.next();
-        players.push( (my_id, shipyard_y, shipyard_x ) );
+        players.push( (player_id, shipyard_y, shipyard_x ) );
     }
     log.borrow_mut().open(my_id);
     input.read_and_parse_line();    
@@ -363,9 +397,8 @@ fn main() {
             *agents_removed.get_mut( k ).unwrap() = removed;
         }
 
-        
         //update macro strategy, assign task to each worker
-        //todo
+        plan_strategy( agents.get_mut(&Player(my_id)).expect("player agent"), &rawmaps.map_r, &rawmaps.map_d );
         
         //execute agent action
         let mut queued_movements = vec![];
