@@ -1,0 +1,3 @@
+struct GameState {
+    const: Constants
+}

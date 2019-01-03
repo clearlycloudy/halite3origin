@@ -1,6 +1,7 @@
 use hlt::log::Log;
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::fmt;
 
 pub struct Constants {
     pub max_halite: usize,
@@ -62,5 +63,12 @@ impl Constants {
             Some(x) => x,
             None => log.panic(&format!("Error: constants: server did not send {} constant.", key))
         }
+    }
+}
+
+impl fmt::Display for Constants {
+    fn fmt( &self, f: & mut fmt::Formatter ) -> fmt::Result {
+        write!( f, "max_halite: {}, ship_cost: {}, dropoff_cost: {}, max_turns: {}, extract_ratio: {}, move_cost_ratio: {}, inspi_enab: {}, inspi_radius: {}, inspi_ship_count: {}, inspi_extract_ratio: {}, inspi_bonus_mult: {}, inspi_move_cost_ratio: {}", self.max_halite, self.ship_cost, self.dropoff_cost, self.max_turns, self.extract_ratio, self.move_cost_ratio, self.inspiration_enabled, self.inspiration_radius, self.inspiration_ship_count, self.inspired_extract_ratio, self.inspired_bonus_multiplier, self.inspired_move_cost_ratio )
+                
     }
 }
