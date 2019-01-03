@@ -131,30 +131,45 @@ impl Agent {
     //return current pos and desired destination
     fn execute( & mut self ) -> (usize,Coord,Coord) {
         match self.status {
-            Idle => {
-                ( self.id,self.pos,self.pos)
-            },
+            Idle => {},
             Mining => {
-                (self.id,self.pos,self.pos)
+                if self.halite >= 750 {
+                    let mut rng = rand::thread_rng();
+                    let num_gen: f32 = rng.gen();
+                    if num_gen < 0.5 || self.halite >= 925 {
+                        self.status = AgentStatus::MoveToDropoff;
+                    }
+                }
             },
             MoveToMine => {
                 let mine_pos = self.assigned_mine.expect("mine pos empty");
                 if self.pos == mine_pos {
                     self.status = AgentStatus::Mining;
-                    (self.id,self.pos,self.pos)
-                } else {
-                    (self.id,self.pos,mine_pos)
                 }
             },
             MoveToDropoff => {
                 let dropoff_pos = self.assigned_dropoff.expect("dropoff pos empty");
                 if self.pos == dropoff_pos {
                     self.status = AgentStatus::MoveToMine;
-                    let mine_pos = self.assigned_mine.expect("mine pos empty");
-                    (self.id,self.pos,mine_pos)
-                } else {
-                    (self.id,self.pos,dropoff_pos)
                 }
+            },
+        }
+        match self.status {
+            Idle => {
+                ( self.id,self.pos,self.pos )
+            },
+            Mining => {
+                let mine_pos = self.assigned_mine.expect("mine pos empty");
+                assert_eq!( mine_pos, self.pos );
+                ( self.id,self.pos,mine_pos )
+            },
+            MoveToMine => {
+                let mine_pos = self.assigned_mine.expect("mine pos empty");
+                ( self.id,self.pos,mine_pos )
+            },
+            MoveToDropoff => {
+                let dropoff_pos = self.assigned_dropoff.expect("dropoff pos empty");
+                ( self.id,self.pos,dropoff_pos )
             },
         }
     }
@@ -214,6 +229,7 @@ fn plan_strategy( player_agents: & mut HashMap<usize,Agent>, map_r: &mapraw::Res
     }
 
     //todo: find mining locations and assign to associated agents, update assigned dropoff locations as well
+    
     
     unimplemented!();
 }
