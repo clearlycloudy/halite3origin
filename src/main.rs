@@ -511,11 +511,11 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
             let num_gen_2: f32 = rng.gen();
             
             if (halite_in_cell >= 750 ) ||
-                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.75) ||
-                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.5) ||
-                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.15) ||
-                ( halite_in_cell >= 50 && halite_in_cell < 100 && num_gen_2 < 0.02) ||
-                ( halite_in_cell < 50 && num_gen_2 < 0.001 ) {
+                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.04) ||
+                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.02) ||
+                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.01) ||
+                ( halite_in_cell >= 50 && halite_in_cell < 100 && num_gen_2 < 0.001) ||
+                ( halite_in_cell < 50 && num_gen_2 < 0.0001 ) {
                 match map_u.get( p_n.0, p_n.1 ) {
                     mapraw::Unit::None => {
                         // log.log(&format!("agent_action_change assign cell: {:?}", agent_action_change));
