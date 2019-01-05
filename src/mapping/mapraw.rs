@@ -6,6 +6,7 @@ pub struct RawMaps {
     pub map_d: DropoffMap,
 }
 
+#[derive(Debug)]
 pub struct ResourceMap {
     pub map: Vec<Vec<usize>>,
     pub dim: (i32,i32), //num rows, num columns
@@ -87,18 +88,21 @@ impl UnitMap {
         }
     }
     pub fn get_player_agents( & mut self, player_id : &usize) -> Vec<(usize,(i32,i32),usize)> {
-        let agents = self.invmap.get(player_id).expect("player id invalid");
-        agents.iter().map(|x|{
-            let unit = self.get((x.1).0,(x.1).1);
-            let h = match unit {
-                Unit::Ship { halite,.. } => {
-                    halite
-                },
-                _ => {panic!("unit type unexpected");},
-            };
-            (*x.0,*x.1,h) //return (id, (posy,posx), halite)
+        if let Some(agents) = self.invmap.get(player_id) {
+            agents.iter().map(|x|{
+                let unit = self.get((x.1).0,(x.1).1);
+                let h = match unit {
+                    Unit::Ship { halite,.. } => {
+                        halite
+                    },
+                    _ => {panic!("unit type unexpected");},
+                };
+                (*x.0,*x.1,h) //return (id, (posy,posx), halite)
 
-        }).collect()
+            }).collect()
+        } else {
+            vec![]
+        }
     }
 }
 
