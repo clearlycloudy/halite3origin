@@ -511,10 +511,11 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
             let num_gen_2: f32 = rng.gen();
             
             if (halite_in_cell >= 750 ) ||
-                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.1) ||
-                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.05) ||
-                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.001 ) ||
-                ( halite_in_cell < 100 && num_gen_2 < 0.0001 ) {
+                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.75) ||
+                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.5) ||
+                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.15) ||
+                ( halite_in_cell >= 50 && halite_in_cell < 100 && num_gen_2 < 0.02) ||
+                ( halite_in_cell < 50 && num_gen_2 < 0.001 ) {
                 match map_u.get( p_n.0, p_n.1 ) {
                     mapraw::Unit::None => {
                         // log.log(&format!("agent_action_change assign cell: {:?}", agent_action_change));
@@ -545,7 +546,7 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
     }
 }
 
-fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >, my_id: &usize, map_u: &mapping::mapraw::UnitMap, shipyard_pos: &HashMap<usize,Coord>, turn_num: &usize, is_end_game: &bool ) -> bool {
+fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >, my_id: &usize, map_u: &mapping::mapraw::UnitMap, shipyard_pos: &HashMap<usize,Coord>, turn_num: &usize, max_turn: &usize, is_end_game: &bool ) -> bool {
 
     let my_shipyard_pos = shipyard_pos.get( my_id ).expect("shipyard position not found");
     
@@ -557,7 +558,7 @@ fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >, my
         
     let create = match player_stats.get( &Player(*my_id) ) {
         Some(stats) => {
-            if (stats.score > (1000 + turn_num * 14) ) && stats.ships < 25 && pos_empty  && !*is_end_game {
+            if (stats.score > 1000 + turn_num * 14 ) && stats.ships < 20 && pos_empty  && !*is_end_game && *turn_num <= *max_turn / 2 {
                 true
             } else {
                 false
@@ -760,7 +761,7 @@ fn main() {
 
         //update macro strategy, assign task to each worker
         let mut is_end_game = false;
-        if constants.max_turns - turn_num <= (rawmaps.map_r.dim.0 * 3 / 4) as usize {
+        if constants.max_turns - turn_num <= (rawmaps.map_r.dim.0 * 7 / 10) as usize {
             is_end_game = true;
             for a in agents.get_mut(&Player(my_id)).expect("player agent") {
                 let mut shortest_dist = 99999999;
@@ -799,7 +800,7 @@ fn main() {
         movements.iter().inspect(|x| log.borrow_mut().log(&format!("{:?}",x)) );
             
         //create new worker if necessary
-        let create_new_agent = determine_create_new_agent( &player_stats, &my_id, &rawmaps.map_u, &shipyard_pos, &turn_num, &is_end_game );
+        let create_new_agent = determine_create_new_agent( &player_stats, &my_id, &rawmaps.map_u, &shipyard_pos, &turn_num, &constants.max_turns, &is_end_game );
         
         //emit commands
         let mut command_queue: Vec<String> = vec![];
