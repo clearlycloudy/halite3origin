@@ -466,7 +466,7 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
         //trace out a square path and find cells that have halite amount above a threshold
         
         let mut p = dropoff_pos;
-        let mut step_stop = 3;
+        let mut step_stop = 2;
         let mut p_n = (p.0+step_stop/2, p.1+step_stop/2);
         log.log(&format!("p_n init: {:?}", p_n));
         let mut step_count = 0;
@@ -484,13 +484,13 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
                 let new_d = { match d {
                     TraceDir::L => { TraceDir::D },
                     TraceDir::D => { TraceDir::R },
-                    TraceDir::R => { TraceDir::U },
-                    TraceDir::U => {
+                    TraceDir::R => {
                         step_stop += 1;
                         p_n.0 = p.0 + (step_stop)/2;
                         p_n.1 = p.1 + (step_stop)/2;
-                        TraceDir::L
+                        TraceDir::U
                     },
+                    TraceDir::U => { TraceDir::L },
                 } };
                 d = new_d;
                 step_count = 0;
@@ -545,7 +545,7 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
     }
 }
 
-fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >, my_id: &usize, map_u: &mapping::mapraw::UnitMap, shipyard_pos: &HashMap<usize,Coord>, turn_num: &usize ) -> bool {
+fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >, my_id: &usize, map_u: &mapping::mapraw::UnitMap, shipyard_pos: &HashMap<usize,Coord>, turn_num: &usize, is_end_game: &bool ) -> bool {
 
     let my_shipyard_pos = shipyard_pos.get( my_id ).expect("shipyard position not found");
     
@@ -556,8 +556,12 @@ fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >, my
     };
         
     let create = match player_stats.get( &Player(*my_id) ) {
-        Some(stats) if stats.score > 1000 + turn_num * 5 && stats.ships < 10 && pos_empty => {
-            true
+        Some(stats) => {
+            if (stats.score > (1000 + turn_num * 14) ) && stats.ships < 25 && pos_empty  && !*is_end_game {
+                true
+            } else {
+                false
+            }
         },
         _ => { false },
     };
@@ -795,7 +799,7 @@ fn main() {
         movements.iter().inspect(|x| log.borrow_mut().log(&format!("{:?}",x)) );
             
         //create new worker if necessary
-        let create_new_agent = determine_create_new_agent( &player_stats, &my_id, &rawmaps.map_u, &shipyard_pos, &turn_num );
+        let create_new_agent = determine_create_new_agent( &player_stats, &my_id, &rawmaps.map_u, &shipyard_pos, &turn_num, &is_end_game );
         
         //emit commands
         let mut command_queue: Vec<String> = vec![];
