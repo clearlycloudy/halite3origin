@@ -262,10 +262,10 @@ struct Agent {
 impl Agent {
 
     fn reset_cooldown_mine( & mut self ) {
-        self.cooldown_mine = 4;
+        self.cooldown_mine = 2;
     }
     fn reset_cooldown_movetomine( & mut self ) {
-        self.cooldown_movetomine = 30;
+        self.cooldown_movetomine = 15;
     }
     fn tick_cooldown_mine( & mut self ) {
         self.cooldown_mine -= 1;
@@ -316,16 +316,16 @@ impl Agent {
             AgentStatus::Idle => {},
             AgentStatus::Mining => {
                 let mine_resource = map_r.get( (self.pos.0).0, (self.pos.0).1 );
-                if self.halite >= 450 && self.cooldown_mine() <= 0 {
+                if self.halite >= 850 && self.cooldown_mine() <= 0 {
                     let mut rng = rand::thread_rng();
                     let num_gen: f32 = rng.gen();
-                    if num_gen < 0.3 || self.halite >= 900 {
+                    if num_gen < 0.3 || self.halite >= 950 {
                         self.status = AgentStatus::MoveToDropoff;
                     }
-                } else if self.cooldown_mine() <= 0 && mine_resource < 75 {
+                } else if self.cooldown_mine() <= 0 && mine_resource < 50 {
                     let mut rng = rand::thread_rng();
                     let num_gen: f32 = rng.gen();
-                    if num_gen < 0.8 {
+                    if num_gen < 0.95 {
                         self.status = AgentStatus::MoveToDropoff;
                     }
                 }
@@ -441,7 +441,7 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
                             if a.cooldown_movetomine() <= 0 && a.cooldown_mine() <= 0 {
                                 assign_new_mine = true;
                             }
-                            if ( resource_count <= 75 && assign_new_mine )//  ||
+                            if ( resource_count < 50 && assign_new_mine )//  ||
                             // resource_count <= 50 {
                             {
                                 let mut rng = rand::thread_rng();                            
@@ -510,12 +510,12 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
             let mut rng = rand::thread_rng();
             let num_gen_2: f32 = rng.gen();
             
-            if (halite_in_cell >= 750 ) ||
-                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.04) ||
-                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.02) ||
-                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.01) ||
-                ( halite_in_cell >= 50 && halite_in_cell < 100 && num_gen_2 < 0.001) ||
-                ( halite_in_cell < 50 && num_gen_2 < 0.0001 ) {
+            if (halite_in_cell >= 750 && num_gen_2 < 0.75 ) ||
+                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.35) ||
+                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.015) ||
+                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.005) ||
+                ( halite_in_cell >= 50 && halite_in_cell < 100 && num_gen_2 < 0.0005) ||
+                ( halite_in_cell < 50 && num_gen_2 < 0.00005 ) {
                 match map_u.get( p_n.0, p_n.1 ) {
                     mapraw::Unit::None => {
                         // log.log(&format!("agent_action_change assign cell: {:?}", agent_action_change));
@@ -558,7 +558,7 @@ fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >, my
         
     let create = match player_stats.get( &Player(*my_id) ) {
         Some(stats) => {
-            if (stats.score > 1000 + turn_num * 14 ) && stats.ships < 20 && pos_empty  && !*is_end_game && *turn_num <= *max_turn / 2 {
+            if (stats.score > 1000 + turn_num * 5 ) && stats.ships < 17 && pos_empty  && !*is_end_game && *turn_num <= (*max_turn * 7 ) / 10 {
                 true
             } else {
                 false
@@ -761,7 +761,7 @@ fn main() {
 
         //update macro strategy, assign task to each worker
         let mut is_end_game = false;
-        if constants.max_turns - turn_num <= (rawmaps.map_r.dim.0 * 7 / 10) as usize {
+        if constants.max_turns - turn_num <= (rawmaps.map_r.dim.0 * 6 / 10) as usize {
             is_end_game = true;
             for a in agents.get_mut(&Player(my_id)).expect("player agent") {
                 let mut shortest_dist = 99999999;
