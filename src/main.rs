@@ -319,13 +319,15 @@ impl Agent {
                 if self.halite >= 850 && self.cooldown_mine() <= 0 {
                     let mut rng = rand::thread_rng();
                     let num_gen: f32 = rng.gen();
-                    if num_gen < 0.3 || self.halite >= 950 {
+                    if num_gen < 0.5 || self.halite >= 950 {
                         self.status = AgentStatus::MoveToDropoff;
                     }
                 } else if self.cooldown_mine() <= 0 && mine_resource < 50 {
                     let mut rng = rand::thread_rng();
                     let num_gen: f32 = rng.gen();
-                    if num_gen < 0.95 {
+                    if num_gen < 0.90 {
+                        self.status = AgentStatus::Idle; //wait to be assign a new mine location by planner
+                    } else {
                         self.status = AgentStatus::MoveToDropoff;
                     }
                 }
@@ -460,12 +462,97 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
 
     //log.log(&format!("agent_action_change: {:?}", agent_action_change));
 
-    //todo: find mining locations and assign to associated agents, update assigned dropoff locations as well
-    for (dropoff_id,dropoff_pos) in map_d.invmap.get(myid).expect("player id not found for dropoff map").iter() {
+    // //todo: find mining locations and assign to associated agents, update assigned dropoff locations as well
+    // for (dropoff_id,dropoff_pos) in map_d.invmap.get(myid).expect("player id not found for dropoff map").iter() {
         
+    //     //trace out a square path and find cells that have halite amount above a threshold
+        
+    //     let mut p = dropoff_pos;
+    //     let mut step_stop = 2;
+    //     let mut p_n = (p.0+step_stop/2, p.1+step_stop/2);
+    //     log.log(&format!("p_n init: {:?}", p_n));
+    //     let mut step_count = 0;
+    //     #[derive(Clone,Copy)]
+    //     enum TraceDir {
+    //         L,R,U,D
+    //     }
+    //     let mut d = TraceDir::U;
+
+    //     let mut cell_processed = 0;
+    //     let mut cell_total = 0;
+    //     while cell_processed < agent_action_change.len() && cell_total < map_r.dim.0 * map_r.dim.1 {
+            
+    //         if step_count >= step_stop {
+    //             let new_d = { match d {
+    //                 TraceDir::L => { TraceDir::D },
+    //                 TraceDir::D => { TraceDir::R },
+    //                 TraceDir::R => {
+    //                     step_stop += 1;
+    //                     p_n.0 = p.0 + (step_stop)/2;
+    //                     p_n.1 = p.1 + (step_stop)/2;
+    //                     TraceDir::U
+    //                 },
+    //                 TraceDir::U => { TraceDir::L },
+    //             } };
+    //             d = new_d;
+    //             step_count = 0;
+    //         }
+    //         match d {
+    //             TraceDir::L => { p_n.1 -= 1; },
+    //             TraceDir::D => { p_n.0 += 1; },
+    //             TraceDir::R => { p_n.1 += 1; },
+    //             TraceDir::U => { p_n.0 -= 1; },
+    //         };
+
+    //         log.log(&format!("p_n: {:?}, step count: {}", p_n, step_count));
+            
+    //         step_count += 1;
+    //         let halite_in_cell = map_r.get( p_n.0, p_n.1 );
+
+    //         let mut rng = rand::thread_rng();
+    //         let num_gen_2: f32 = rng.gen();
+            
+    //         if (halite_in_cell >= 750 && num_gen_2 < 0.75 ) ||
+    //             (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.35) ||
+    //             ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.015) ||
+    //             ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.005) ||
+    //             ( halite_in_cell >= 50 && halite_in_cell < 100 && num_gen_2 < 0.0005) ||
+    //             ( halite_in_cell < 50 && num_gen_2 < 0.00005 ) {
+    //             match map_u.get( p_n.0, p_n.1 ) {
+    //                 mapraw::Unit::None => {
+    //                     // log.log(&format!("agent_action_change assign cell: {:?}", agent_action_change));
+    //                     let y = ( p_n.0 % (map_r.dim).0 + (map_r.dim).0 ) % (map_r.dim).0;
+    //                     let x = ( p_n.1 % (map_r.dim).1 + (map_r.dim).1 ) % (map_r.dim).1;
+    //                     let a_id = agent_action_change.pop().expect("agent_action empty");
+    //                     let mut a = player_agents.get_mut(&a_id).expect("agent id not found");
+    //                     let mut processed = false;
+    //                     if let AgentStatus::Idle = a.status {
+    //                         a.status = AgentStatus::MoveToMine;
+    //                         a.reset_cooldown_movetomine();
+    //                     }
+
+    //                     a.assigned_mine = Some( Coord( (y,x) ) );
+    //                     a.assigned_dropoff = Some( Coord( (dropoff_pos.0,dropoff_pos.1) ) );
+    //                     processed = true;
+                        
+    //                     log.log(&format!("agent after action change: {:?}", a));
+    //                     if processed {
+    //                         cell_processed += 1;
+    //                     }
+    //                 },
+    //                 _ => {},
+    //             }
+    //         }
+    //         cell_total += 1;
+    //     }
+    // }
+
+    //assign each associated agent with a new location to mine
+    for a_id in agent_action_change.iter() {
+        let mut a = player_agents.get_mut(a_id).expect("agent id not found");
         //trace out a square path and find cells that have halite amount above a threshold
         
-        let mut p = dropoff_pos;
+        let mut p = a.pos.0;
         let mut step_stop = 2;
         let mut p_n = (p.0+step_stop/2, p.1+step_stop/2);
         log.log(&format!("p_n init: {:?}", p_n));
@@ -518,11 +605,8 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
                 ( halite_in_cell < 50 && num_gen_2 < 0.00005 ) {
                 match map_u.get( p_n.0, p_n.1 ) {
                     mapraw::Unit::None => {
-                        // log.log(&format!("agent_action_change assign cell: {:?}", agent_action_change));
                         let y = ( p_n.0 % (map_r.dim).0 + (map_r.dim).0 ) % (map_r.dim).0;
                         let x = ( p_n.1 % (map_r.dim).1 + (map_r.dim).1 ) % (map_r.dim).1;
-                        let a_id = agent_action_change.pop().expect("agent_action empty");
-                        let mut a = player_agents.get_mut(&a_id).expect("agent id not found");
                         let mut processed = false;
                         if let AgentStatus::Idle = a.status {
                             a.status = AgentStatus::MoveToMine;
@@ -530,7 +614,20 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
                         }
 
                         a.assigned_mine = Some( Coord( (y,x) ) );
-                        a.assigned_dropoff = Some( Coord( (dropoff_pos.0,dropoff_pos.1) ) );
+
+                        //assign a drop off point for the agent
+                        let mut best_dropoff = None;
+                        let mut min_dropoff_norm = std::i32::MAX;
+                        for (dropoff_id,dropoff_pos) in map_d.invmap.get(myid).expect("player id not found for dropoff map").iter() {
+                            let coord_diff = Coord( (dropoff_pos.0, dropoff_pos.1) ) - Coord( (y,x) );
+                            let diff_norm = (coord_diff.0).0.abs() + (coord_diff.0).1.abs();
+                            if diff_norm < min_dropoff_norm {
+                                min_dropoff_norm = diff_norm;
+                                best_dropoff = Some( Coord( (dropoff_pos.0, dropoff_pos.1) ) );
+                            }
+                        }
+                        
+                        a.assigned_dropoff = Some( best_dropoff.unwrap() );
                         processed = true;
                         
                         log.log(&format!("agent after action change: {:?}", a));
