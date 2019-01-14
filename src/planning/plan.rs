@@ -225,10 +225,10 @@ pub fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & m
                             if a.cooldown_movetomine() <= 0 && a.cooldown_mine() <= 0 {
                                 assign_new_mine = true;
                             }
-                            if resource_count < 30 && assign_new_mine {
+                            if resource_count < 40 && assign_new_mine {
                                 let mut rng = rand::thread_rng();                            
                                 let num_gen: f32 = rng.gen();
-                                if num_gen < 0.5 {
+                                if num_gen < 0.9 {
                                     agent_action_change.push(*id);
                                 }   
                             }   
@@ -296,8 +296,8 @@ pub fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & m
                 (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.3) ||
                 ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.1) ||
                 ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.005) ||
-                ( halite_in_cell >= 30 && halite_in_cell < 100 && num_gen_2 < 0.001) ||
-                ( halite_in_cell < 30 && num_gen_2 < 0.0001 ) {
+                ( halite_in_cell >= 30 && halite_in_cell < 100 && num_gen_2 < 0.002) ||
+                ( halite_in_cell < 30 && num_gen_2 < 0.00005 ) {
                 match map_u.get( p_n.0, p_n.1 ) {
                     Unit::None => {
                         let y = ( p_n.0 % (map_r.dim).0 + (map_r.dim).0 ) % (map_r.dim).0;
@@ -500,14 +500,24 @@ pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >
         
     let create = match player_stats.get( &Player(*my_id) ) {
         Some(stats) => {
-            if stats.score > 1000 
-                && pos_empty
-                && !*is_end_game
-                && *turn_num <= (*max_turn * 65 ) / 100 {
-                true
-            } else {
-                false
-            }
+            // if stats.score > 1000 
+            //     && pos_empty
+            //     && !*is_end_game
+            //     && *turn_num <= (*max_turn * 65 ) / 100 {
+            //     true
+            // } else {
+            //     false
+            // }
+            
+            if stats.score > 1000 &&
+                pos_empty &&
+                !*is_end_game &&
+                ( *turn_num <= (*max_turn * 1 ) / 4 ||
+                ( *max_turn - *turn_num) as f32 * stats.score_accum_rate * 0.6 > 1000f32 ) {
+                    true
+                } else {
+                    false
+                }
         },
         _ => { false },
     };

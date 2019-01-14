@@ -121,6 +121,8 @@ fn main() {
     let mut agents : HashMap<Player, HashMap<usize,Agent> > = HashMap::new();
 
     let mut agents_removed : HashMap<Player, Vec<Agent> > = HashMap::new();
+
+    let mut created_agent_last_turn = false;
     
     loop {
 
@@ -157,8 +159,27 @@ fn main() {
             let num_ships : usize = input.next();
             let num_dropoffs : usize = input.next();
             let player_halite : usize = input.next();
-            
-            player_stats.insert( Player(player_id), PlayerStats{ score: player_halite, ships: num_ships, dropoffs: num_dropoffs } );
+
+            if let None = player_stats.get( &Player(player_id) ) {
+                player_stats.insert( Player(player_id), PlayerStats{ score: player_halite, ships: num_ships, dropoffs: num_dropoffs, score_accum_rate: 0f32, score_accum_window: 50i32 } );
+            } else {
+                match player_stats.get_mut( &Player(player_id) ){
+                    Some(cur_stat) => {
+                        cur_stat.score = player_halite;
+                        cur_stat.ships = num_ships;
+                        cur_stat.dropoffs = num_dropoffs;
+                        let diff_halite = if created_agent_last_turn {
+                            // player_halite - cur_stat.score + 1000
+                            player_halite - cur_stat.score
+                        } else {
+                            player_halite - cur_stat.score
+                        };
+                        cur_stat.score_accum_rate = ( (cur_stat.score_accum_window - 1) as f32 * cur_stat.score_accum_rate + diff_halite as f32 ) / cur_stat.score_accum_window as f32;
+                    },
+                    _ => {},
+                }
+            }
+
             
             for _ in 0..num_ships {
                 input.read_and_parse_line();
@@ -259,6 +280,8 @@ fn main() {
                                                              & turn_num,
                                                              & constants.max_turns,
                                                              & is_end_game );
+
+        created_agent_last_turn = create_new_agent;
         
         //emit commands
         add_and_flush_cmds( & turn_num,

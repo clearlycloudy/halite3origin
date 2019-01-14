@@ -92,12 +92,12 @@ impl Agent {
                 
                 if self.halite >= 950 ||
                     (self.cooldown_mine() <= 0 &&
-                     ( self.halite >= 850 && num_gen < 0.5 ) ||
-                     ( self.halite >= 500 && self.halite < 850 && num_gen < 0.1 ) ||
+                     ( self.halite >= 850 && num_gen < 0.2 ) ||
+                     ( self.halite >= 500 && self.halite < 850 && num_gen < 0.02 ) ||
                      ( self.halite >= 200 && self.halite < 500 && num_gen < 0.01 )
                     ) {
                         self.status = AgentStatus::MoveToDropoff;
-                } else if self.cooldown_mine() <= 0 && mine_resource < 30 {
+                } else if self.cooldown_mine() <= 0 && mine_resource < 20 {
                     let mut rng = rand::thread_rng();
                     let num_gen: f32 = rng.gen();
                     if num_gen < 0.95 {
