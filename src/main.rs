@@ -265,7 +265,7 @@ impl Agent {
         self.cooldown_mine = 2;
     }
     fn reset_cooldown_movetomine( & mut self ) {
-        self.cooldown_movetomine = 15;
+        self.cooldown_movetomine = 10;
     }
     fn tick_cooldown_mine( & mut self ) {
         self.cooldown_mine -= 1;
@@ -316,16 +316,21 @@ impl Agent {
             AgentStatus::Idle => {},
             AgentStatus::Mining => {
                 let mine_resource = map_r.get( (self.pos.0).0, (self.pos.0).1 );
-                if self.halite >= 850 && self.cooldown_mine() <= 0 {
-                    let mut rng = rand::thread_rng();
-                    let num_gen: f32 = rng.gen();
-                    if num_gen < 0.5 || self.halite >= 950 {
+                
+                let mut rng = rand::thread_rng();
+                let num_gen: f32 = rng.gen();
+                
+                if self.halite >= 950 ||
+                    (self.cooldown_mine() <= 0 &&
+                     ( self.halite >= 850 && num_gen < 0.5 ) ||
+                     ( self.halite >= 500 && self.halite < 850 && num_gen < 0.1 ) ||
+                     ( self.halite >= 200 && self.halite < 500 && num_gen < 0.01 )
+                    ) {
                         self.status = AgentStatus::MoveToDropoff;
-                    }
-                } else if self.cooldown_mine() <= 0 && mine_resource < 50 {
+                } else if self.cooldown_mine() <= 0 && mine_resource < 30 {
                     let mut rng = rand::thread_rng();
                     let num_gen: f32 = rng.gen();
-                    if num_gen < 0.90 {
+                    if num_gen < 0.95 {
                         self.status = AgentStatus::Idle; //wait to be assign a new mine location by planner
                     } else {
                         self.status = AgentStatus::MoveToDropoff;
@@ -443,9 +448,7 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
                             if a.cooldown_movetomine() <= 0 && a.cooldown_mine() <= 0 {
                                 assign_new_mine = true;
                             }
-                            if ( resource_count < 50 && assign_new_mine )//  ||
-                            // resource_count <= 50 {
-                            {
+                            if resource_count < 30 && assign_new_mine {
                                 let mut rng = rand::thread_rng();                            
                                 let num_gen: f32 = rng.gen();
                                 if num_gen < 0.5 {
@@ -516,8 +519,8 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
                 (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.3) ||
                 ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.1) ||
                 ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.005) ||
-                ( halite_in_cell >= 50 && halite_in_cell < 100 && num_gen_2 < 0.001) ||
-                ( halite_in_cell < 50 && num_gen_2 < 0.0001 ) {
+                ( halite_in_cell >= 30 && halite_in_cell < 100 && num_gen_2 < 0.001) ||
+                ( halite_in_cell < 30 && num_gen_2 < 0.0001 ) {
                 match map_u.get( p_n.0, p_n.1 ) {
                     mapraw::Unit::None => {
                         let y = ( p_n.0 % (map_r.dim).0 + (map_r.dim).0 ) % (map_r.dim).0;
@@ -544,6 +547,144 @@ fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut H
                         
                         a.assigned_dropoff = Some( best_dropoff.unwrap() );
                         processed = true;
+                        
+                        log.log(&format!("agent after action change: {:?}", a));
+                        if processed {
+                            cell_processed += 1;
+                        }
+                    },
+                    _ => {},
+                }
+            }
+            cell_total += 1;
+        }
+    }
+}
+
+fn plan_strategy_around_dropoff( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut HashMap<usize,Agent>, map_r: &mapraw::ResourceMap, map_d: &mapraw::DropoffMap, map_u: & mapraw::UnitMap ) {
+    
+    let mut agent_action_change = vec![];
+
+    //find agents with mine resource amount below a threshold
+    for (id,a) in player_agents.iter() {
+        match a.status {
+            AgentStatus::Idle => {
+                agent_action_change.push(*id);
+            },
+            AgentStatus::MoveToDropoff =>{
+                match a.assigned_mine {
+                    None => { agent_action_change.push(*id); },
+                    Some(x) => {
+                        // let (y,x) = (a.pos).0;
+                        if let Some(Coord((y,x))) = a.assigned_mine {
+                            let resource_count = map_r.get( y, x );
+                            let mut assign_new_mine = false;
+                            if a.cooldown_movetomine() <= 0 && a.cooldown_mine() <= 0 {
+                                assign_new_mine = true;
+                            }
+                            if resource_count < 30 && assign_new_mine {
+                                let mut rng = rand::thread_rng();                            
+                                let num_gen: f32 = rng.gen();
+                                if num_gen < 0.9 {
+                                    agent_action_change.push(*id);
+                                }   
+                            }   
+                        }
+                    },
+                }
+            },
+            _ => {},
+        }
+    }
+
+    let mut agent_idx = 0;
+    
+    //assign each associated agent with a new location to mine
+    for (dropoff_id,dropoff_pos) in map_d.invmap.get(myid).expect("player id not found for dropoff map").iter() {
+        let dropoff_coord = Coord( (dropoff_pos.0, dropoff_pos.1) );
+
+        let mut p = dropoff_pos;
+        let mut step_stop = 2;
+        let mut p_n = (p.0+step_stop/2, p.1+step_stop/2);
+        log.log(&format!("p_n init: {:?}", p_n));
+        let mut step_count = 0;
+        #[derive(Clone,Copy)]
+        enum TraceDir {
+            L,R,U,D
+        }
+        let mut d = TraceDir::U;
+
+        let mut cell_processed = 0;
+        let mut cell_total = 0;
+        
+        while cell_total < map_r.dim.0 * map_r.dim.1 && agent_idx < agent_action_change.len() {
+
+            let a_id = &agent_action_change[agent_idx];
+
+            let mut a = player_agents.get_mut(a_id).expect("agent id not found");
+            
+            if step_count >= step_stop {
+                let new_d = { match d {
+                    TraceDir::L => { TraceDir::D },
+                    TraceDir::D => { TraceDir::R },
+                    TraceDir::R => {
+                        step_stop += 1;
+                        p_n.0 = p.0 + (step_stop)/2;
+                        p_n.1 = p.1 + (step_stop)/2;
+                        TraceDir::U
+                    },
+                    TraceDir::U => { TraceDir::L },
+                } };
+                d = new_d;
+                step_count = 0;
+            }
+            match d {
+                TraceDir::L => { p_n.1 -= 1; },
+                TraceDir::D => { p_n.0 += 1; },
+                TraceDir::R => { p_n.1 += 1; },
+                TraceDir::U => { p_n.0 -= 1; },
+            };
+            
+            step_count += 1;
+            
+            let halite_in_cell = map_r.get( p_n.0, p_n.1 );
+
+            let mut rng = rand::thread_rng();
+            let num_gen_2: f32 = rng.gen();
+            
+            if (halite_in_cell >= 750 && num_gen_2 < 0.75 ) ||
+                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.3) ||
+                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.1) ||
+                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.005) ||
+                ( halite_in_cell >= 30 && halite_in_cell < 100 && num_gen_2 < 0.001) ||
+                ( halite_in_cell < 30 && num_gen_2 < 0.00001 ) {
+                match map_u.get( p_n.0, p_n.1 ) {
+                    mapraw::Unit::None => {
+                        let y = ( p_n.0 % (map_r.dim).0 + (map_r.dim).0 ) % (map_r.dim).0;
+                        let x = ( p_n.1 % (map_r.dim).1 + (map_r.dim).1 ) % (map_r.dim).1;
+                        let mut processed = false;
+                        if let AgentStatus::Idle = a.status {
+                            a.status = AgentStatus::MoveToMine;
+                            a.reset_cooldown_movetomine();
+                        }
+
+                        a.assigned_mine = Some( Coord( (y,x) ) );
+
+                        //assign a drop off point for the agent
+                        let mut best_dropoff = None;
+                        let mut min_dropoff_norm = std::i32::MAX;
+                        for (dropoff_id,dropoff_pos) in map_d.invmap.get(myid).expect("player id not found for dropoff map").iter() {
+                            let coord_diff = Coord( (dropoff_pos.0, dropoff_pos.1) ) - Coord( (y,x) );
+                            let diff_norm = (coord_diff.0).0.abs() + (coord_diff.0).1.abs();
+                            if diff_norm < min_dropoff_norm {
+                                min_dropoff_norm = diff_norm;
+                                best_dropoff = Some( Coord( (dropoff_pos.0, dropoff_pos.1) ) );
+                            }
+                        }
+                        
+                        a.assigned_dropoff = Some( best_dropoff.unwrap() );
+                        processed = true;
+                        agent_idx += 1;
                         
                         log.log(&format!("agent after action change: {:?}", a));
                         if processed {
@@ -792,7 +933,8 @@ fn main() {
                 a.1.status = AgentStatus::EndGame;
             }
         } else {
-            plan_strategy( & mut log.borrow_mut(), &my_id, agents.get_mut(&Player(my_id)).expect("player agent"), &rawmaps.map_r, &rawmaps.map_d, &rawmaps.map_u );
+            // plan_strategy( & mut log.borrow_mut(), &my_id, agents.get_mut(&Player(my_id)).expect("player agent"), &rawmaps.map_r, &rawmaps.map_d, &rawmaps.map_u );
+            plan_strategy_around_dropoff( & mut log.borrow_mut(), &my_id, agents.get_mut(&Player(my_id)).expect("player agent"), &rawmaps.map_r, &rawmaps.map_d, &rawmaps.map_u );            
         }
 
         log.borrow_mut().log(&format!("agents: {:?}", agents.get_mut(&Player(my_id)).expect("player agent") ) );
