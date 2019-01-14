@@ -119,7 +119,25 @@ pub fn schedule( queued: Vec<(usize,Coord,Coord)>,
                                 None
                             }
                         } else {
-                            None
+                            if let Unit::Ship{ player,.. } = map_u.get( y, x ) {
+                                if player != *my_id {
+                                    if let Some(dropoff_player_id) = map_d.get( y, x ) {
+                                        if dropoff_player_id.0 == *my_id {
+                                            map_u.set( y, x, agent );
+                                            found = true;
+                                            Some(dir)
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
                         }
                     }
                 }
@@ -292,11 +310,11 @@ pub fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & m
             let mut rng = rand::thread_rng();
             let num_gen_2: f32 = rng.gen();
             
-            if (halite_in_cell >= 750 && num_gen_2 < 0.75 ) ||
-                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.3) ||
-                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.1) ||
-                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.005) ||
-                ( halite_in_cell >= 30 && halite_in_cell < 100 && num_gen_2 < 0.002) ||
+            if (halite_in_cell >= 750 && num_gen_2 < 0.85 ) ||
+                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.45) ||
+                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.25) ||
+                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.02) ||
+                ( halite_in_cell >= 30 && halite_in_cell < 100 && num_gen_2 < 0.001) ||
                 ( halite_in_cell < 30 && num_gen_2 < 0.00005 ) {
                 match map_u.get( p_n.0, p_n.1 ) {
                     Unit::None => {
@@ -488,11 +506,17 @@ pub fn plan_strategy_around_dropoff( log: & mut hlt::log::Log, myid: &usize, pla
     }
 }
 
-pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >, my_id: &usize, map_u: &UnitMap, shipyard_pos: &HashMap<usize,Coord>, turn_num: &usize, max_turn: &usize, is_end_game: &bool ) -> bool {
+pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >,
+                                   my_id: &usize,
+                                   rawmaps: &RawMaps,
+                                   shipyard_pos: &HashMap<usize,Coord>,
+                                   turn_num: &usize,
+                                   max_turn: &usize,
+                                   is_end_game: &bool ) -> bool {
 
     let my_shipyard_pos = shipyard_pos.get( my_id ).expect("shipyard position not found");
     
-    let pos_empty = if let Unit::None = map_u.get( (my_shipyard_pos.0).0, (my_shipyard_pos.0).1 ) {
+    let pos_empty = if let Unit::None = rawmaps.map_u.get( (my_shipyard_pos.0).0, (my_shipyard_pos.0).1 ) {
         true
     } else {
         false
@@ -512,8 +536,11 @@ pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >
             if stats.score > 1000 &&
                 pos_empty &&
                 !*is_end_game &&
-                ( *turn_num <= (*max_turn * 1 ) / 4 ||
-                ( *max_turn - *turn_num) as f32 * stats.score_accum_rate * 0.6 > 1000f32 ) {
+                (stats.ships == 0 || (rawmaps.map_r.total_remain() as f32 / stats.ships as f32 > 6000. && ( *turn_num <= (*max_turn * 7 ) / 10 ) ) ) {
+                // ( *turn_num <= (*max_turn * 1 ) / 2 ||
+                //    ( *max_turn - *turn_num) as f32 * stats.score_accum_rate * 0.95 > 1000f32 ||
+                //    rawmaps.map_r.total_remain() >= 4000000
+                // ) {
                     true
                 } else {
                     false

@@ -169,7 +169,7 @@ fn main() {
                         cur_stat.ships = num_ships;
                         cur_stat.dropoffs = num_dropoffs;
                         let diff_halite = if created_agent_last_turn {
-                            // player_halite - cur_stat.score + 1000
+                            // player_halite - cur_stat.score + ( 1000f32 * 1.) as usize
                             player_halite - cur_stat.score
                         } else {
                             player_halite - cur_stat.score
@@ -275,7 +275,7 @@ fn main() {
         //create new worker if necessary
         let create_new_agent = determine_create_new_agent( & player_stats,
                                                              & my_id,
-                                                             & rawmaps.map_u,
+                                                             & rawmaps,
                                                              & shipyard_pos,
                                                              & turn_num,
                                                              & constants.max_turns,

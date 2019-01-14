@@ -18,6 +18,15 @@ impl ResourceMap {
         let c = ( col % self.dim.1 + self.dim.1 ) % self.dim.1;
         self.map[r as usize][c as usize]
     }
+    pub fn total_remain(& self) -> usize {
+        let mut ret = 0;
+        for i in self.map.iter() {
+            for j in i.iter() {
+                ret += *j;
+            }
+        }
+        ret
+    }
 }
 
 #[derive(Clone,Copy)]
