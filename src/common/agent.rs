@@ -26,7 +26,7 @@ pub struct Agent {
     pub status: AgentStatus,
     pub halite: usize,
     pub pos: Coord,
-    pub id: usize,
+    pub id: i32,
     pub cooldown_mine: i32,
     pub cooldown_movetomine: i32,
 }
@@ -80,12 +80,12 @@ impl Agent {
         self.assigned_dropoff = Some(pos);
     }
     //return current pos and desired destination
-    pub fn execute( & mut self, map_r: &ResourceMap ) -> (usize,Coord,Coord) {
+    pub fn execute( & mut self, map_r: &ResourceMap ) -> (i32,Coord,Coord) {
 
         match self.status {
             AgentStatus::Idle => {},
             AgentStatus::Mining => {
-                let mine_resource = map_r.get( (self.pos.0).0, (self.pos.0).1 );
+                let mine_resource = map_r.get( self.pos );
                 
                 let mut rng = rand::thread_rng();
                 let num_gen: f32 = rng.gen();

@@ -7,20 +7,20 @@ use mapping::mapraw::{ResourceMap, RawMaps, UnitMap, DropoffMap, Unit};
 use common::agent::{Agent,AgentStatus};
 use common::coord::{Coord,Dir};
 
-pub fn synchronize_player_agents( player_agents: & HashMap<usize,Agent>, update: Vec<(usize,(i32,i32),usize)> ) -> ( HashMap<usize,Agent>, Vec<Agent> ) {
+pub fn synchronize_player_agents( player_agents: & HashMap<i32,Agent>, update: Vec<(i32,Coord,usize)> ) -> ( HashMap<i32,Agent>, Vec<Agent> ) {
     let mut processed_ids = HashSet::new();
     let mut ret = HashMap::new();
 
     let update_ids = update.iter().map(|x| x.0).collect::<HashSet<_>>();
     
-    for (id,(y,x),halite) in update {
+    for (id,coord,halite) in update {
         processed_ids.insert(id);
         match player_agents.get(&id) {
             Some(a) => {
                 assert_eq!(id, a.id);
                 let mut agent_updated = a.clone();
                 agent_updated.halite = halite;
-                agent_updated.pos = Coord( (y,x) );
+                agent_updated.pos = coord;
                 ret.insert(id, agent_updated);
                 // assert_eq!( agent_updated.expected_next_pos, Coord((y,x)) );
             },
@@ -31,7 +31,7 @@ pub fn synchronize_player_agents( player_agents: & HashMap<usize,Agent>, update:
                     assigned_dropoff: None,
                     status: AgentStatus::Idle,
                     halite: halite,
-                    pos: Coord( (y,x) ),
+                    pos: coord,
                     id: id,
                     cooldown_mine: 0i32,
                     cooldown_movetomine: 0i32,

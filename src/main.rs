@@ -10,6 +10,7 @@ mod cmd;
 use cmd::cmd::add_and_flush_cmds;
 use mapping::{mapraw};
 use planning::{plan::{schedule,
+                      schedule_v2,
                       plan_strategy_around_dropoff,
                       plan_strategy,
                       plan_strategy_new,
@@ -81,25 +82,27 @@ fn main() {
         players.push( (player_id, shipyard_y, shipyard_x ) );
         shipyard_pos.insert( player_id, Coord((shipyard_y, shipyard_x)) );
     }
-    log.borrow_mut().open(my_id);
+    log.borrow_mut().open(my_id as usize);
     input.read_and_parse_line();    
     let map_w : i32 = input.next();
     let map_h : i32 = input.next();
     let mut rawmaps;
     {
+        let mut map_r = mapping::mapraw::ResourceMap::from( ( map_h, map_w ) );
+        
         let mut v = vec![ vec![ 0; map_w as usize]; map_h as usize];
         for i in 0..map_h as usize {
             input.read_and_parse_line();
             for j in 0..map_w as usize {
                 let amount : usize = input.next();
                 v[i][j] = amount;
+                map_r.set( Coord( (i as i32, j as i32) ), amount );
             }
         }
-        let rm = mapping::mapraw::ResourceMap { map: v, dim: (map_h, map_w) };
         rawmaps = mapping::mapraw::RawMaps {
-            map_r: rm,
-            map_u: Default::default(),
-            map_d: Default::default(),
+            map_r: map_r,
+            map_u: mapping::mapraw::UnitMap::from( ( map_h, map_w ) ),
+            map_d: mapping::mapraw::DropoffMap::from( ( map_h, map_w ) ),
         };
     }
 
@@ -118,7 +121,7 @@ fn main() {
 
     let mut player_stats : HashMap< Player, PlayerStats > = Default::default();
 
-    let mut agents : HashMap<Player, HashMap<usize,Agent> > = HashMap::new();
+    let mut agents : HashMap<Player, HashMap<i32,Agent> > = HashMap::new();
 
     let mut agents_removed : HashMap<Player, Vec<Agent> > = HashMap::new();
 
@@ -183,7 +186,7 @@ fn main() {
             
             for _ in 0..num_ships {
                 input.read_and_parse_line();
-                let ship_id : usize = input.next();
+                let ship_id : i32 = input.next();
                 let x : i32 = input.next();
                 let y : i32 = input.next();
                 let ship_halite : usize = input.next();
@@ -192,7 +195,7 @@ fn main() {
                     log.borrow_mut().log(&format!("ship id: {}, y: {}, x: {}", ship_id, y, x));
                 }
                 
-                rawmaps.map_u.set( y, x, mapping::mapraw::Unit::Ship{ player: player_id, id: ship_id, halite: ship_halite } );
+                rawmaps.map_u.set( Coord((y, x)), mapping::mapraw::Unit::Ship{ player: player_id, id: ship_id, halite: ship_halite } );
             }
 
             for _ in 0..num_dropoffs {
@@ -200,7 +203,7 @@ fn main() {
                 let dropoff_id : usize = input.next();
                 let x : i32 = input.next();
                 let y : i32 = input.next();
-                rawmaps.map_d.set( dropoff_id as i32, y, x, mapping::mapraw::Player( player_id ) );
+                rawmaps.map_d.set( dropoff_id as i32, Coord((y, x)), mapping::mapraw::Player( player_id ) );
             }
 
             //also count shipyard as a dropoff point
@@ -208,7 +211,7 @@ fn main() {
                 let id = i.0;
                 let y = i.1;
                 let x = i.2;
-                rawmaps.map_d.set( -1i32, y, x, mapping::mapraw::Player( id ) );
+                rawmaps.map_d.set( -1i32, Coord((y, x)), mapping::mapraw::Player( id ) );
             }
             
         }
@@ -218,19 +221,19 @@ fn main() {
         log.borrow_mut().log(&format!("resource update count: {}", map_update_count));        
         for _ in 0..map_update_count {
             input.read_and_parse_line();
-            let x : usize = input.next();
-            let y : usize = input.next();
+            let x : i32 = input.next();
+            let y : i32 = input.next();
             let halite_amount : usize = input.next();
-            rawmaps.map_r.map[y][x] = halite_amount;
+            rawmaps.map_r.set( Coord( (y, x) ), halite_amount );
             log.borrow_mut().log(&format!("resource update [{}][{}]: {}", y,x,halite_amount));
         }
 
-        log.borrow_mut().log(&format!("unit map: {:?}", rawmaps.map_u.invmap ));
+        // log.borrow_mut().log(&format!("unit map: {:?}", rawmaps.map_u.invmap ));
         
         //synchronize agent information
         for k in player_stats.keys() {
             
-            let player_agents = rawmaps.map_u.get_player_agents( &k.0 );
+            let player_agents = rawmaps.map_u.get_player_agents( k.0 );
             if !agents.contains_key( k ) {
                 agents.insert( k.clone(), HashMap::new() );
             }
@@ -253,7 +256,7 @@ fn main() {
                                                constants.max_turns,
                                                & my_id,
                                                & mut agents,
-                                               & rawmaps );
+                                               & mut rawmaps );
         
         //crate agent actions
         let ( queued_movements, queued_new_dropoffs ) = synthesize_agent_actions( & mut log.borrow_mut(),
@@ -264,15 +267,18 @@ fn main() {
                                                                                     &rawmaps );                
         // log.borrow_mut().log(&format!("queued movement: {:?}", queued_movements ) );
 
-        let movements = schedule( queued_movements,
-                                  & rawmaps.map_r,
-                                  & rawmaps.map_d,
-                                  & mut rawmaps.map_u,
-                                  & is_end_game, &my_id );
+        let movements = schedule( & my_id,
+                                       queued_movements,
+                                       & agents,
+                                       & mut rawmaps,
+                                       & is_end_game );
         // log.borrow_mut().log(&format!("inspecting scheduled movements:") );
         // movements.iter().inspect(|x| log.borrow_mut().log(&format!("{:?}",x)) );
             
         //create new worker if necessary
+        let halite_remain = rawmaps.map_r.total_remain();
+        log.borrow_mut().log(&format!("turn {}, halite_remain: {}", turn_num, halite_remain));
+        
         let create_new_agent = determine_create_new_agent( & player_stats,
                                                              & my_id,
                                                              & rawmaps,

@@ -11,8 +11,8 @@ use common::coord::{Coord,Dir};
 
 pub fn add_and_flush_cmds( turn_num: &usize,
                            log: & mut hlt::log::Log, // cmd: & mut Vec<String>,
-                           movements: &[(usize,Dir)],
-                           new_dropoffs: &[usize],
+                           movements: &[(i32,Dir)],
+                           new_dropoffs: &[i32],
                            create_agent: &bool ) {
 
     let mut cmd = vec![];
@@ -37,7 +37,7 @@ pub fn add_and_flush_cmds( turn_num: &usize,
     println!();
 }
 
-fn add_movement_cmd( shipid: &usize,
+fn add_movement_cmd( shipid: &i32,
                      dir: &Dir,
                      cmd: & mut Vec<String> )
                      -> Result< (), & 'static str > {
@@ -64,7 +64,7 @@ fn add_movement_cmd( shipid: &usize,
 }
 
 
-fn add_dropoff_cmd( shipid: usize,
+fn add_dropoff_cmd( shipid: i32,
                     cmd: & mut Vec<String> )
                     -> Result< (), & 'static str > {
     cmd.push( format!("c {}", shipid ) );
