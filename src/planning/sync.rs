@@ -7,11 +7,12 @@ use mapping::mapraw::{ResourceMap, RawMaps, UnitMap, DropoffMap, Unit};
 use common::agent::{Agent,AgentStatus};
 use common::coord::{Coord,Dir};
 
-pub fn synchronize_player_agents( player_agents: & HashMap<i32,Agent>, update: Vec<(i32,Coord,usize)> ) -> ( HashMap<i32,Agent>, Vec<Agent> ) {
+pub fn synchronize_player_agents( player_agents: & HashMap<i32,Agent>, update: Vec<(i32,Coord,usize)> ) -> ( Option<i32>, HashMap<i32,Agent>, Vec<Agent> ) {
     let mut processed_ids = HashSet::new();
     let mut ret = HashMap::new();
-
+    
     let update_ids = update.iter().map(|x| x.0).collect::<HashSet<_>>();
+    let mut new_agent = None;
     
     for (id,coord,halite) in update {
         processed_ids.insert(id);
@@ -22,7 +23,6 @@ pub fn synchronize_player_agents( player_agents: & HashMap<i32,Agent>, update: V
                 agent_updated.halite = halite;
                 agent_updated.pos = coord;
                 ret.insert(id, agent_updated);
-                // assert_eq!( agent_updated.expected_next_pos, Coord((y,x)) );
             },
             _ => {
                 //new agent found
@@ -37,6 +37,7 @@ pub fn synchronize_player_agents( player_agents: & HashMap<i32,Agent>, update: V
                     cooldown_movetomine: 0i32,
                 };
                 ret.insert(id, a);
+                new_agent = Some(id);
             },
         }
     }
@@ -48,5 +49,5 @@ pub fn synchronize_player_agents( player_agents: & HashMap<i32,Agent>, update: V
         removed_agents.push( a.clone() );
     }
         
-    ( ret, removed_agents )
+    ( new_agent, ret, removed_agents )
 }

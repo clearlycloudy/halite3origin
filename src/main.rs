@@ -11,7 +11,7 @@ use cmd::cmd::add_and_flush_cmds;
 use mapping::{mapraw};
 use planning::{plan::{schedule,
                       schedule_v2,
-                      plan_strategy_around_dropoff,
+                      // plan_strategy_around_dropoff,
                       plan_strategy,
                       plan_strategy_new,
                       determine_create_dropoff,
@@ -229,6 +229,8 @@ fn main() {
         }
 
         // log.borrow_mut().log(&format!("unit map: {:?}", rawmaps.map_u.invmap ));
+
+        let mut new_agent_id = None;
         
         //synchronize agent information
         for k in player_stats.keys() {
@@ -237,8 +239,11 @@ fn main() {
             if !agents.contains_key( k ) {
                 agents.insert( k.clone(), HashMap::new() );
             }
-            let (updated_agents, removed) = synchronize_player_agents( agents.get( k ).unwrap(), player_agents );
+            let (new_agent, updated_agents, removed) = synchronize_player_agents( agents.get( k ).unwrap(), player_agents );
             log.borrow_mut().log(&format!("player {}: agents updated count: {}", k.0, updated_agents.len() ));
+
+            new_agent_id = new_agent;
+            
             *agents.get_mut( k ).unwrap() = updated_agents;
                                  
             if !agents_removed.contains_key( k ) {
@@ -267,13 +272,16 @@ fn main() {
                                                                                     &rawmaps );                
         // log.borrow_mut().log(&format!("queued movement: {:?}", queued_movements ) );
 
-        let movements = schedule( & my_id,
+        // let movements = schedule( & mut log.borrow_mut(),
+        let movements = schedule_v2( & mut log.borrow_mut(),
+                                       & my_id,
                                        queued_movements,
-                                       & agents,
+                                       & mut agents,
                                        & mut rawmaps,
-                                       & is_end_game );
-        // log.borrow_mut().log(&format!("inspecting scheduled movements:") );
-        // movements.iter().inspect(|x| log.borrow_mut().log(&format!("{:?}",x)) );
+                                       & is_end_game,
+                                       new_agent_id );
+        log.borrow_mut().log(&format!("inspecting scheduled movements:{:?}", movements ) );
+        movements.iter().inspect(|x| log.borrow_mut().log(&format!("{:?}",x)) );
             
         //create new worker if necessary
         let halite_remain = rawmaps.map_r.total_remain();

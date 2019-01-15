@@ -41,16 +41,16 @@ impl < T > MapGeneric < T > where T: Clone + Copy + Default {
         }
     }
     pub fn remove_item_from_inv_map( & mut self, player_id: usize, item_id: i32 ) -> bool {
-        if let Some(item) = self.invmap.get_mut(&player_id) {
-            item.remove( &item_id ).is_some()
+        if let Some(items) = self.invmap.get_mut(&player_id) {
+            items.remove( &item_id ).is_some()
         } else {
             false
         }
     }
     pub fn add_item_inv_map( & mut self, player_id: usize, item_id: i32, c: Coord ) {
         let exists = match self.invmap.get_mut(&player_id) {
-            Some(item) => {
-                item.insert( item_id, c );
+            Some(items) => {
+                items.insert( item_id, c );
                 true
             },
             _ => {

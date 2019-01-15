@@ -34,7 +34,7 @@ pub fn add_and_flush_cmds( turn_num: &usize,
         log.borrow_mut().log(&format!("turn {}, command: {}", turn_num, i));
         print!("{} ", i);
     }
-    println!();
+    println!("");
 }
 
 fn add_movement_cmd( shipid: &i32,

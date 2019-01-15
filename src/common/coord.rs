@@ -1,5 +1,8 @@
 use rand::Rng;
 
+use std::cmp::Ordering;
+use std::cmp::Reverse;
+
 use std::ops::{Add,Sub};
 
 use mapping::mapraw::{ResourceMap, RawMaps, UnitMap, DropoffMap, Unit};
@@ -12,6 +15,13 @@ pub struct Vector(pub(f32,f32)); //(y,x)
 
 #[derive(Clone,Copy,Debug)]
 pub struct Dir(pub (i32,i32)); //(y,x)
+
+impl From<Coord> for Dir {
+    fn from( c: Coord ) -> Dir {
+        assert!( c.abs() == 1 );
+        Dir( (c.y(), c.x()) )
+    }
+}
 
 impl Default for Coord {
     fn default() -> Coord {
@@ -47,10 +57,31 @@ impl Coord {
         Coord( (r,c) )
     }
     pub fn modulo( & self, bound: &Coord ) -> Coord {
-        let r = ( (self.0).0 % (bound.0).0 + (bound.0).0 ) % (bound.0).0;
-        let c = ( (self.0).1 % (bound.0).1 + (bound.0).1 ) % (bound.0).1;
+        let r = ( ((self.0).0 % ((bound.0).0)) + ((bound.0).0) ) % ((bound.0).0);
+        let c = ( ((self.0).1 % ((bound.0).1)) + ((bound.0).1) ) % ((bound.0).1);
         Coord( (r,c) )
     }
+
+    pub fn diff_wrap_around( & self, other: &Coord, bound: &Coord ) -> Coord {
+        let mut dif = self.modulo( bound ) - other.modulo( bound );
+        
+        if (dif.0).0 > bound.y()/2 {
+            (dif.0).0 -= bound.y();
+        }
+        if (dif.0).0 < -bound.y()/2 {
+            (dif.0).0 += bound.y();
+        }
+
+        if (dif.0).1 > bound.x()/2 {
+            (dif.0).1 -= bound.x();
+        }
+        if (dif.0).1 < -bound.x()/2 {
+            (dif.0).1 += bound.x();
+        }
+
+        dif
+    }
+    
     pub fn get_prioritized_dir( & self, dest: & Coord, rawmap: & RawMaps ) -> Vec<Coord> {
         let mut dif = *dest - *self;
         

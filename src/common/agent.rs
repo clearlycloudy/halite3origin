@@ -11,6 +11,7 @@ pub enum AgentStatus {
     Idle,
     EndGame,
     CreateDropoff,
+    // NewlyCreated,
 }
 
 impl Default for AgentStatus {
