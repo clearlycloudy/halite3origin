@@ -110,7 +110,7 @@ pub fn search_path( start: Coord, dest: Coord, map: &UnitMap ) -> Vec<Coord> {
             path.insert( *i, frontier_coord );
         }
         count_steps += 1;
-        if count_steps > ((dim.y() * dim.x()) as f32 * 0.5) as usize {
+        if count_steps > ((dim.y() * dim.x()) as f32 * 0.4) as usize {
             break;
         }
     }

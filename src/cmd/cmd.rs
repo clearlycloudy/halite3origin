@@ -13,12 +13,13 @@ pub fn add_and_flush_cmds( turn_num: &usize,
                            log: & mut hlt::log::Log, // cmd: & mut Vec<String>,
                            movements: &[(i32,Dir)],
                            new_dropoffs: &[i32],
-                           create_agent: &bool ) {
+                           create_agent: &bool,
+                           ship_id_create_dropoff: Option<i32> ) {
 
     let mut cmd = vec![];
     
     for (id,dir) in movements.iter() {
-        add_movement_cmd( &id, &dir, & mut cmd ).expect("add movement failed");
+        add_movement_cmd( &id, &dir, & mut cmd, ship_id_create_dropoff ).expect("add movement failed");
     }
 
     for id in new_dropoffs.iter() {
@@ -39,7 +40,8 @@ pub fn add_and_flush_cmds( turn_num: &usize,
 
 fn add_movement_cmd( shipid: &i32,
                      dir: &Dir,
-                     cmd: & mut Vec<String> )
+                     cmd: & mut Vec<String>,
+                     ship_id_create_dropoff: Option<i32> )
                      -> Result< (), & 'static str > {
     if (dir.0).0.abs() + (dir.0).1.abs() > 1 {
         Err( "Dir value invalid" )
@@ -57,6 +59,13 @@ fn add_movement_cmd( shipid: &i32,
             &Dir((0,1)) => {
                 cmd.push( format!("m {} e", shipid ) );
             },
+            &Dir((0,0)) => {
+                if let Some(x) = ship_id_create_dropoff {
+                    if *shipid == x {
+                        cmd.push( format!("c {}", shipid ) );
+                    }
+                }
+            }
             _ => {},
         }
         Ok( () )

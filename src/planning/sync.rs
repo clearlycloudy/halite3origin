@@ -33,8 +33,7 @@ pub fn synchronize_player_agents( player_agents: & HashMap<i32,Agent>, update: V
                     halite: halite,
                     pos: coord,
                     id: id,
-                    cooldown_mine: 0i32,
-                    cooldown_movetomine: 0i32,
+                    create_dropoff: None,
                 };
                 ret.insert(id, a);
                 new_agent = Some(id);

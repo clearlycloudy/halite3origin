@@ -11,11 +11,10 @@ use cmd::cmd::add_and_flush_cmds;
 use mapping::{mapraw};
 use planning::{plan::{schedule,
                       schedule_v2,
-                      // plan_strategy_around_dropoff,
-                      plan_strategy,
-                      plan_strategy_new,
                       determine_create_dropoff,
                       determine_create_new_agent,
+                      assign_agents_to_mine,
+                      find_resource_to_mine,
                       synthesize_agent_actions},
                sync::synchronize_player_agents};
 
@@ -242,7 +241,9 @@ fn main() {
             let (new_agent, updated_agents, removed) = synchronize_player_agents( agents.get( k ).unwrap(), player_agents );
             log.borrow_mut().log(&format!("player {}: agents updated count: {}", k.0, updated_agents.len() ));
 
-            new_agent_id = new_agent;
+            if my_id == k.0 {
+                new_agent_id = new_agent;
+            }
             
             *agents.get_mut( k ).unwrap() = updated_agents;
                                  
@@ -253,15 +254,71 @@ fn main() {
             *agents_removed.get_mut( k ).unwrap() = removed;
         }
 
+        if let Some(new_id) = new_agent_id {
+            let my_shipyard_pos = shipyard_pos.get( &my_id ).expect("shipyard position not found");
+            match rawmaps.map_u.get( *my_shipyard_pos ) {  
+                mapping::mapraw::Unit::None => {
+                    let mut new_pos = None;
+                    for j in rawmaps.map_u.get_player_agents( my_id ).iter() {
+                        if j.0 == new_id {
+                            new_pos = Some(j.1);
+                            break;
+                        }
+                    }
+                    panic!("expecting ship {:?} at shipyard:{:?}", new_pos, my_shipyard_pos );
+                },
+                _ => {},
+            }
+        }
+
         //agent implementation starts here -------------------------------------------------------------------
+        let kernel_dim = 15;
+
+        //find suitable resource locations
+        let best_locs = find_resource_to_mine( & mut log.borrow_mut(),
+                                                 &my_id, agents.get_mut( &Player( my_id ) ).unwrap(),
+                                                 & mut rawmaps, kernel_dim );
         
-        //update macro strategy, assign task to each worker
-        let is_end_game = plan_strategy_new( & mut log.borrow_mut(),
-                                               turn_num,
-                                               constants.max_turns,
-                                               & my_id,
-                                               & mut agents,
-                                               & mut rawmaps );
+        //update states for agents
+        for (agent_id, agent) in agents.get_mut( &Player( my_id ) ).unwrap().iter_mut() {
+            agent.update_state( & mut rawmaps, kernel_dim );
+        }
+
+        let mut is_end_game = false;
+        {
+            let mut my_agents = agents.get_mut( &Player(my_id) ).expect("agents not found for input player id");
+            
+            if constants.max_turns - turn_num <= (rawmaps.map_r.dim().y() * 7 / 10) as usize {
+                is_end_game = true;
+                for a in my_agents.iter_mut() {
+                    let mut shortest_dist = 99999999;
+                    let mut dest = None;
+
+                    for (dropoff_id,dropoff_pos) in rawmaps.map_d.get_player_dropoffs(my_id).iter() {
+                        
+                        let dist = (a.1.pos - *dropoff_pos).abs();
+
+                        if shortest_dist > dist {
+                            shortest_dist = dist;
+                            dest = Some(*dropoff_pos);
+                        }
+                    }
+                    a.1.assigned_dropoff = Some(dest.unwrap());
+                    a.1.status = AgentStatus::EndGame;
+                }
+            } else {
+
+                //assign all idle agents to some resource location
+                assign_agents_to_mine( & mut log.borrow_mut(), &my_id, my_agents, & mut rawmaps, &best_locs );
+                
+                // determine_create_dropoff( & mut log.borrow_mut(), &my_id, my_agents, &rawmaps.map_r, &rawmaps.map_d, &rawmaps.map_u );
+            }    
+        }
+
+        //locally assign locations to mine for relevant agents
+        for (agent_id, agent) in agents.get_mut( &Player( my_id ) ).unwrap().iter_mut() {
+            agent.assign_mine_locally( & mut rawmaps, kernel_dim );
+        }
         
         //crate agent actions
         let ( queued_movements, queued_new_dropoffs ) = synthesize_agent_actions( & mut log.borrow_mut(),
@@ -272,14 +329,24 @@ fn main() {
                                                                                     &rawmaps );                
         // log.borrow_mut().log(&format!("queued movement: {:?}", queued_movements ) );
 
-        // let movements = schedule( & mut log.borrow_mut(),
-        let movements = schedule_v2( & mut log.borrow_mut(),
+        let ship_id_create_dropoff = determine_create_dropoff( & mut log.borrow_mut(),
+                                                                 & player_stats,
+                                                                 & my_id,
+                                                                 agents.get_mut( &Player( my_id ) ).unwrap(),
+                                                                 & mut rawmaps,
+                                                                 & turn_num,
+                                                                 & constants.max_turns,
+                                                                 & is_end_game );
+        
+        let movements = schedule( & mut log.borrow_mut(),
+        // let movements = schedule_v2( & mut log.borrow_mut(),
                                        & my_id,
                                        queued_movements,
                                        & mut agents,
                                        & mut rawmaps,
                                        & is_end_game,
-                                       new_agent_id );
+                                    new_agent_id );
+        
         log.borrow_mut().log(&format!("inspecting scheduled movements:{:?}", movements ) );
         movements.iter().inspect(|x| log.borrow_mut().log(&format!("{:?}",x)) );
             
@@ -302,7 +369,8 @@ fn main() {
                              & mut log.borrow_mut(),
                              movements.as_slice(),
                              queued_new_dropoffs.as_slice(),
-                             & create_new_agent );
+                              & create_new_agent,
+                              ship_id_create_dropoff );
         
         //log time
         let mut t_elapsed = t_start.elapsed();

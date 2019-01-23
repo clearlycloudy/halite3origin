@@ -48,9 +48,10 @@ impl < T > MapGeneric < T > where T: Clone + Copy + Default {
         }
     }
     pub fn add_item_inv_map( & mut self, player_id: usize, item_id: i32, c: Coord ) {
+        let coord = c.modulo( &self.dim );
         let exists = match self.invmap.get_mut(&player_id) {
             Some(items) => {
-                items.insert( item_id, c );
+                items.insert( item_id, coord );
                 true
             },
             _ => {
@@ -59,7 +60,7 @@ impl < T > MapGeneric < T > where T: Clone + Copy + Default {
         };
         if !exists {
             self.invmap.insert(player_id, HashMap::new() );
-            self.invmap.get_mut(&player_id).unwrap().insert( item_id, c );
+            self.invmap.get_mut(&player_id).unwrap().insert( item_id, coord );
         }
     }
     pub fn clear_player_item_inv_map( & mut self, player_id: usize ) {
@@ -117,6 +118,18 @@ impl ResourceMap {
             }
         }
         ret
+    }
+    pub fn area_remain( & self, c: Coord, radius: i32 ) -> usize {
+        let mut ret = 0;
+        for y in c.y() - radius ..= c.y() + radius {
+            for x in c.x() - radius ..= c.x() + radius {
+                ret += self.get( Coord( (y,x) ) );
+            }
+        }
+        ret
+    }
+    pub fn avg_remain(&self) -> f32 {
+        self.total_remain() as f32 / (self.dim().y() * self.dim().x()) as f32
     }
 }
 
@@ -211,4 +224,161 @@ impl DropoffMap {
             (*dropoff_id,*coord) //return (dropoff_id, (posy,posx) )
         }).collect()
     }
+}
+
+use std::ops::Add;
+use std::ops::Mul;
+
+//add resource map filtering
+pub fn convolution<T>( map: &Vec<Vec<T>>, dim: Coord, kernel: Vec<Vec<T>> ) -> Vec<Vec<T>>
+where T: Add<Output=T> + Mul<Output=T> + Default + Clone + Copy
+{
+    assert!( kernel.len() > 0 );
+    assert!( kernel[0].len() > 0 );
+    let kernel_mid = kernel.len() as i32/2;
+    let mut ret = vec![ vec![T::default(); dim.x() as usize]; dim.y() as usize ];
+    for e1 in 0..dim.y() as usize {
+        for e2 in 0..dim.x() as usize {
+            let mut sum = T::default();
+            for (idxi, i) in kernel.iter().enumerate() {
+                for (idxj, j) in i.iter().enumerate() {
+                    let offset = Coord( (-kernel_mid + e1 as i32, -kernel_mid + e2 as i32 ) ).modulo( &dim );
+                    let coord = (offset + Coord( (idxi as i32, idxj as i32) )).modulo( &dim );
+                    let v = map[coord.y() as usize][coord.x() as usize];
+                    sum = sum + v * *j;
+                }
+            }
+            ret[e1][e2] = sum;
+        }
+    }
+    ret
+}
+
+use std::cmp;
+
+pub fn get_max<T>( v: &Vec<Vec<T>>, num_loc: Option<usize> ) -> Vec<(Coord,T)>
+    where T: PartialOrd + Default + Clone
+{
+    assert!( v.len() > 0 );
+    let mut ret = vec![];
+    for (idy, i) in v.iter().enumerate() {
+        for (idx, j ) in i.iter().enumerate() {
+            ret.push( ( Coord( (idy as _,idx as _) ), j.clone() ) );
+        }
+    }
+    use rand::Rng;
+    rand::thread_rng().shuffle( & mut ret[..] );
+    
+    ret.sort_unstable_by( |a,b| (b.1).partial_cmp(&a.1).unwrap() );
+    if let Some(n) = num_loc {
+        ret.truncate( n );
+    }
+    ret
+}
+
+#[derive(Debug,Copy,Clone)]
+pub enum ConvolveKernelVal {
+    Uniform,
+    Gaussian,
+}
+
+pub fn get_kernel_builtin( ker_val: ConvolveKernelVal,  ker_size: usize ) -> Vec<Vec<f32>> {
+    assert!( ker_size > 0 );
+    let mut ret = vec![ vec![0.; ker_size]; ker_size ];
+    match ker_val {
+        ConvolveKernelVal::Uniform => {
+            let val = 1./((ker_size * ker_size) as f32);
+            for i in ret.iter_mut() {
+                for j in i.iter_mut() {
+                    *j = val;
+                }
+            }
+        },
+        ConvolveKernelVal::Gaussian => {
+            let center = ker_size as f32 / 2.;
+            for (idy,i) in ret.iter_mut().enumerate() {
+                for (idx,j) in i.iter_mut().enumerate() {
+                    let expo = -0.5*((idy as f32 - center).powi(2)+(idx as f32 - center).powi(2));
+                    *j = 1./((2.*std::f32::consts::PI).sqrt()) * expo.exp();
+                }
+            }
+        },
+    }
+    ret
+}
+
+pub fn get_best_locations( ker_val: ConvolveKernelVal,  ker_size: usize, map: &Vec<Vec<usize>>, num_loc: Option<usize> ) -> Vec<Coord> {
+    assert!( map.len() > 0 );
+    let kernel = get_kernel_builtin( ker_val,  ker_size );
+    let dim = Coord( ( map.len() as _, map[0].len() as _ ) );
+    let mut map_float = vec![ vec![0.; map[0].len()]; map.len() ];
+    for (idy,i) in map.iter().enumerate(){
+        for (idx,j) in i.iter().enumerate(){
+            map_float[idy][idx] = *j as f32;
+        }
+    }
+    let filt_map = convolution( &map_float, dim, kernel );
+    
+    let (coords,vals) : (Vec<_>,Vec<_>) = get_max( &filt_map, num_loc).iter().cloned().unzip();
+    coords
+}
+
+pub enum PathAction {
+    Subtract,
+    Add,
+}
+
+pub fn get_approx_halite_in_path( halite_amount: f32, start: Coord, end: Coord, map: &RawMaps, path_action: PathAction, avg_map_resource: f32 ) -> f32 {
+
+    let mut halite = halite_amount as f32;
+    let mut s = start;
+    if s == end {
+        return halite
+    }
+
+    let mut get_first = false;
+
+    // let halite_negative = if halite < 0. {
+    //     halite
+    // } else {
+    //     0.
+    // };
+    
+    while s != end {
+        let dir = s.get_prioritized_dir( &end, map );
+        let deposit = map.map_r.get( s );
+        match path_action {
+            PathAction::Subtract => {
+                halite = halite - 0.1 * deposit as f32;
+                if halite < 0. {
+                    halite = 0.;
+                    break;
+                }
+            },
+            _ => {
+                if !get_first {
+                    halite = halite + deposit as f32;
+                    get_first = true;
+                } else {
+                    halite = halite - 0.07 * deposit as f32;
+                }
+            },
+        }
+        s = (s + dir[0]).modulo(&map.map_r.dim() );
+    }
+    
+    let dist = start.diff_wrap_around( &end, &map.map_r.dim()).abs();
+
+    // if halite_negative < 0. {
+    //     halite = halite_negative - (dist as f32) * (dist as f32) * 0.15 * map.map_r.avg_remain();
+    // } else {
+    //     halite = halite - (dist as f32) * (dist as f32) * 0.15 * map.map_r.avg_remain();
+    // }
+    
+    // halite = halite - (map.map_r.avg_remain()).powf(2.*dist as f32); 
+    // halite = halite - (0.25 * map.map_r.avg_remain() * dist as f32).exp();
+    halite = halite - (0.1 * avg_map_resource * dist as f32).exp();
+    
+    
+    halite
 }

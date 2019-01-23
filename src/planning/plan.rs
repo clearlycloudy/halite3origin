@@ -6,7 +6,7 @@ use rand::SeedableRng;
 use std::collections::{HashMap,HashSet,VecDeque,BinaryHeap};
 use std::borrow::BorrowMut;
 
-use mapping::mapraw::{ResourceMap, RawMaps, UnitMap, DropoffMap, Unit};
+use mapping::mapraw::{ResourceMap, RawMaps, UnitMap, DropoffMap, Unit, *};
 use common::agent::{Agent,AgentStatus};
 use common::coord::{Coord,Dir};
 use common::player::{Player,PlayerStats};
@@ -45,9 +45,9 @@ fn get_num_free_neighours( c: Coord, map: & RawMaps ) -> usize {
 fn get_free_neighours( c: Coord, d: Coord, map: & RawMaps, is_end_game: bool ) -> Vec<(Coord,usize)> {
     
     let mut offsets = [ Coord::from( (-1,0) ),
-                    Coord::from( (1,0) ),
-                    Coord::from( (0,-1) ),
-                    Coord::from( (0,1) ) ];
+                        Coord::from( (1,0) ),
+                        Coord::from( (0,-1) ),
+                        Coord::from( (0,1) )];
 
     rand::thread_rng().shuffle( & mut offsets[..] );
 
@@ -70,9 +70,33 @@ fn get_free_neighours( c: Coord, d: Coord, map: & RawMaps, is_end_game: bool ) -
     
     let mut rng = rand::thread_rng();    
     let num_gen: f32 = rng.gen();
-    if num_gen < 0.2 && !is_end_game {
+    if num_gen < 0.3 && !is_end_game {
         rand::thread_rng().shuffle( & mut ret[..] );
     }
+    
+    ret
+}
+
+//returns vector of neightbour position sorted in descending order of most free neighour spaces
+fn get_neighours_most_free( c: Coord, map: & RawMaps ) -> Vec<(Coord,usize)> {
+    
+    let mut offsets = [ Coord::from( (-1,0) ),
+                        Coord::from( (1,0) ),
+                        Coord::from( (0,-1) ),
+                        Coord::from( (0,1) )];
+
+    rand::thread_rng().shuffle( & mut offsets[..] );
+
+    let mut ret = vec![];
+    
+    for i in offsets.iter() {
+        let pos = (c + *i).modulo( &map.map_u.dim() );
+        let free = get_num_free_neighours( pos, map );
+        ret.push( (pos,free) );
+    }
+
+    rand::thread_rng().shuffle( & mut ret[..] );    
+    ret.sort_unstable_by(|a,b| b.1.cmp(&a.1) );
     
     ret
 }
@@ -81,7 +105,7 @@ struct NeighCost((i32,usize));
 
 impl Ord for NeighCost {
     fn cmp( & self, other: &NeighCost ) -> Ordering {
-        (self.0).1.cmp( &(other.0).1 )
+        (other.0).1.cmp( &(self.0).1 )
     }
 }
 
@@ -93,7 +117,7 @@ impl PartialOrd for NeighCost {
 
 impl PartialEq for NeighCost {
     fn eq( & self, other: &NeighCost ) -> bool {
-        (other.0).1.cmp( &(self.0).1 ) == Ordering::Equal
+        (self.0).1.cmp( &(other.0).1 ) == Ordering::Equal
     }
 }
 
@@ -117,11 +141,11 @@ pub fn schedule_v2( log: & mut hlt::log::Log,
     
     for (id,from,to) in queued.iter() {
 
-        if let Some(spawned_id) = new_agent_id {
-            if spawned_id == *id {
-                continue;
-            }
-        }
+        // if let Some(spawned_id) = new_agent_id {
+        //     if spawned_id == *id {
+        //         continue;
+        //     }
+        // }
         
         let num = get_num_free_neighours( *from, map );
         count_neighbours.insert( *id, num );
@@ -176,7 +200,7 @@ pub fn schedule_v2( log: & mut hlt::log::Log,
                 
                 a.pos = coord_next;
 
-                // map.map_u.remove( from );
+                //map.map_u.remove( from );
                 // map.map_u.set( from, Unit::None );
                 map.map_u.set( coord_next, unit );
 
@@ -235,18 +259,61 @@ pub fn schedule_v2( log: & mut hlt::log::Log,
                         map.map_u.set( coord_next, unit );
 
                         match map.map_u.get( coord_next ) { 
-                            Unit::Ship{..} => {},
+                            Unit::Ship{id,..} => {
+                            },
                             _ => {panic!("unexpected item in map"); },
                         }
 
+                        // match map.map_u.get( from ) { 
+                        //     Unit::Ship{..} => {
+                        //         panic!("unexpected item in map");
+                        //     },
+                        //     _ => {},
+                        // }
+
                         ret.push( (id, Dir::from(diff) ) );
-                    }//  else {
-                    //     ret.push( (id, Dir( (0,0) ) ) );
-                    // }
+                    }
+                else {
+                        // let neighbour_ranking = get_neighours_most_free( from, &map );
+                        // assert!( neighbour_ranking.len() > 0 );
+
+                        // for nei in neighbour_ranking.iter() {
+                        //     match map.map_u.get( nei.0 ) {
+                        //         Unit::Ship{id:nei_id,..} => {
+                        //             if !processed.contains( &nei_id ) {
+
+                        //                 let unit = Unit::Ship { player: *my_id,
+                        //                                         id: a.id,
+                        //                                         halite: a.halite };
+                                        
+                        //                 let coord_next = nei.0.modulo( &map.map_u.dim() );
+                        //                 a.pos = coord_next;
+
+                        //                 let u = map.map_u.get( nei.0 );
+                                        
+                        //                 // map.map_u.remove( from );
+                        //                 map.map_u.set( from, u );
+                        //                 map.map_u.set( coord_next, unit );
+
+                        //                 let diff = coord_next.diff_wrap_around( &from, &map.map_u.dim() );
+                        //                 let diff_nei = from.diff_wrap_around( &coord_next, &map.map_u.dim() );
+                                        
+                        //                 ret.push( (id, Dir::from(diff) ) );
+                        //                 ret.push( (nei_id, Dir::from(diff_nei) ) );
+                                        
+                        //                 // h.push( NeighCost( (nei_id, 0) ) );
+                        //                 processed.insert( nei_id );
+                        //                 break;
+                        //             }
+                        //         },
+                        //         _ => {},
+                        //     }
+                        // }
+                }
             }
         }
     }
-    
+    ret.reverse();
     ret
 }
 
@@ -309,7 +376,7 @@ pub fn schedule( log: & mut hlt::log::Log,
             choices_no.push( (from, Dir((0,-1))) );
             choices_no.push( (from, Dir((0,1))) );
         } else {
-
+            choices_no.push( (from, Dir((0,0))) );
         }
         
         if (dif.0).1 >= 1 {
@@ -322,6 +389,8 @@ pub fn schedule( log: & mut hlt::log::Log,
             choices_no.push( (from, Dir((0,1))) );
             choices_no.push( (from, Dir((-1,0))) );
             choices_no.push( (from, Dir((1,0))) );
+        }else {
+            choices_no.push( (from, Dir((0,0))) );
         }
 
         rand::thread_rng().shuffle( & mut choices[..] );
@@ -429,333 +498,120 @@ pub fn synthesize_agent_actions( log: & mut hlt::log::Log,
     ( queued_movements, queued_new_dropoffs )
 }
 
-pub fn plan_strategy_new( log: & mut hlt::log::Log,
-                          turn_num: usize,
-                          max_turns: usize,
-                          my_id: &usize,
-                          agents: & mut HashMap<Player, HashMap<i32,Agent> >,
-                          rawmaps: & mut RawMaps ) -> bool {
-
-    let mut my_agents = agents.get_mut( &Player(*my_id) ).expect("agents not found for input player id");
+//pick locations to mine
+pub fn find_resource_to_mine( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut HashMap<i32,Agent>, rawmaps: & mut RawMaps, kernel_dim: usize ) -> Vec<Coord> {
     
-    let mut is_end_game = false;
-    if max_turns - turn_num <= (rawmaps.map_r.dim().y() * 8 / 10) as usize {
-        is_end_game = true;
-        for a in my_agents.iter_mut() {
-            let mut shortest_dist = 99999999;
-            let mut dest = None;
-
-            for (dropoff_id,dropoff_pos) in rawmaps.map_d.get_player_dropoffs(*my_id).iter() {
-                
-                let dist = (a.1.pos - *dropoff_pos).abs();
-
-                if shortest_dist > dist {
-                    shortest_dist = dist;
-                    dest = Some(*dropoff_pos);
-                }
-            }
-            a.1.assigned_dropoff = Some(dest.unwrap());
-            a.1.status = AgentStatus::EndGame;
-        }
-    } else {
-        plan_strategy( & mut log.borrow_mut(), my_id, my_agents, & mut rawmaps.map_r, & mut rawmaps.map_d, & mut rawmaps.map_u );
-        
-        determine_create_dropoff( & mut log.borrow_mut(), &my_id, my_agents, &rawmaps.map_r, &rawmaps.map_d, &rawmaps.map_u );
-    }
-    is_end_game
+    //pick a suitable kernel size, do convolution on map
+    //pick out best places from filtered resource map
+    // let best_locs = get_best_locations( ConvolveKernelVal::Uniform, kernel_dim, &rawmaps.map_r.base.map, None );
+    let best_locs = get_best_locations( ConvolveKernelVal::Gaussian, kernel_dim, &rawmaps.map_r.base.map, None );
+    best_locs
 }
 
-///old stuff
+//assign agents to selected resource locations
+pub fn assign_agents_to_mine( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut HashMap<i32,Agent>, rawmaps: & mut RawMaps, locations: &Vec<Coord> ) {
 
-pub fn plan_strategy( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut HashMap<i32,Agent>, map_r: & mut ResourceMap, map_d: & mut DropoffMap, map_u: & mut UnitMap ) {
-    
+    //update agent status and assign resource if possible
     let mut agent_action_change = vec![];
 
-    //find agents with mine resource amount below a threshold
-    for (id,a) in player_agents.iter() {
+    for (id,a) in player_agents.iter_mut() {
         match a.status {
             AgentStatus::Idle => {
                 agent_action_change.push(*id);
-            },
-            AgentStatus::MoveToDropoff =>{
-                match a.assigned_mine {
-                    None => { agent_action_change.push(*id); },
-                    Some(x) => {
-                        // let (y,x) = (a.pos).0;
-                        if let Some(Coord((y,x))) = a.assigned_mine {
-                            let resource_count = map_r.get( Coord((y, x)) );
-                            let mut assign_new_mine = false;
-                            if a.cooldown_movetomine() <= 0 && a.cooldown_mine() <= 0 {
-                                assign_new_mine = true;
-                            }
-                            if resource_count < 40 && assign_new_mine {
-                                let mut rng = rand::thread_rng();                            
-                                let num_gen: f32 = rng.gen();
-                                if num_gen < 0.9 {
-                                    agent_action_change.push(*id);
-                                }   
-                            }   
-                        }
-                    },
-                }
+                a.status = AgentStatus::MoveToMine;
             },
             _ => {},
         }
     }
+    
+    let mut processed_cell = HashSet::new();
 
-    //log.log(&format!("agent_action_change: {:?}", agent_action_change));
+    let avg_map_resource = rawmaps.map_r.avg_remain();
+    
+    for i in agent_action_change.iter() {
+        let mut a = player_agents.get_mut(i).expect("agent id not found");
+        let pos_start = a.pos;
+        let mut pos_best = None;
+        let mut halite_best = std::f32::MIN;
+        for j in locations.iter(){
 
-    //assign each associated agent with a new location to mine
-    for a_id in agent_action_change.iter() {
-        let mut a = player_agents.get_mut(a_id).expect("agent id not found");
-        //trace out a square path and find cells that have halite amount above a threshold
-        
-        let mut p = a.pos.0;
-        let mut step_stop = 2;
-        let mut p_n = (p.0+step_stop/2, p.1+step_stop/2);
-        log.log(&format!("p_n init: {:?}", p_n));
-        let mut step_count = 0;
-        #[derive(Clone,Copy)]
-        enum TraceDir {
-            L,R,U,D
-        }
-        let mut d = TraceDir::U;
-
-        let mut cell_processed = 0;
-        let mut cell_total = 0;
-        while cell_processed < agent_action_change.len() && cell_total < map_r.dim().y() * map_r.dim().x() {
-            
-            if step_count >= step_stop {
-                let new_d = { match d {
-                    TraceDir::L => { TraceDir::D },
-                    TraceDir::D => { TraceDir::R },
-                    TraceDir::R => {
-                        step_stop += 1;
-                        p_n.0 = p.0 + (step_stop)/2;
-                        p_n.1 = p.1 + (step_stop)/2;
-                        TraceDir::U
-                    },
-                    TraceDir::U => { TraceDir::L },
-                } };
-                d = new_d;
-                step_count = 0;
+            if processed_cell.contains( j ) {
+                continue;
             }
-            match d {
-                TraceDir::L => { p_n.1 -= 1; },
-                TraceDir::D => { p_n.0 += 1; },
-                TraceDir::R => { p_n.1 += 1; },
-                TraceDir::U => { p_n.0 -= 1; },
+            
+            let pos_end = *j;
+            let halite_agent = a.halite;
+
+            let dropoff_point = {
+                let mut dropoff = None;
+                let mut min_dropoff_norm = std::i32::MAX;
+                
+                for (dropoff_id,dropoff_pos) in rawmaps.map_d.get_player_dropoffs(*myid).iter() {
+
+                    let diff_norm = dropoff_pos.diff_wrap_around( &pos_end, &rawmaps.map_r.base.dim ).abs();
+                    if diff_norm < min_dropoff_norm {
+                        min_dropoff_norm = diff_norm;
+                        dropoff = Some( *dropoff_pos );
+                    }
+                }
+                dropoff.expect("dropoff invalid")
             };
-
-            // log.log(&format!("p_n: {:?}, step count: {}", p_n, step_count));
             
-            step_count += 1;
-            let halite_in_cell = map_r.get( Coord( (p_n.0, p_n.1) ) );
-
-            let mut rng = rand::thread_rng();
-            let num_gen_2: f32 = rng.gen();
+            let halite_1 = get_approx_halite_in_path( halite_agent as f32,
+                                                      pos_start,
+                                                      pos_end,
+                                                      &rawmaps,
+                                                      PathAction::Subtract,
+                                                      avg_map_resource );
             
-            if (halite_in_cell >= 750 && num_gen_2 < 0.85 ) ||
-                (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.45) ||
-                ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.25) ||
-                ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.02) ||
-                ( halite_in_cell >= 30 && halite_in_cell < 100 && num_gen_2 < 0.001) ||
-                ( halite_in_cell < 30 && num_gen_2 < 0.00005 ) {
-                match map_u.get( Coord( (p_n.0, p_n.1) ) ) {
-                    Unit::None => {
-                        let Coord( (y,x) ) = Coord::from( p_n ).modulo( &map_r.dim() );
+            let halite_2 = get_approx_halite_in_path( halite_1,
+                                                      pos_end,
+                                                      dropoff_point,
+                                                      &rawmaps,
+                                                      PathAction::Add,
+                                                      avg_map_resource );
+            let halite_remain = halite_2;
+            
+            if halite_remain > halite_best {
 
-                        let mut processed = false;
-                        if let AgentStatus::Idle = a.status {
-                            a.status = AgentStatus::MoveToMine;
-                            a.reset_cooldown_movetomine();
-                        }
+                // let d0 = pos_end.diff_wrap_around( &pos_start, &rawmaps.map_r.base.dim );
+                // let d1 = pos_best.unwrap().diff_wrap_around( &pos_start, &rawmaps.map_r.base.dim );
+                // if d0.abs() < d1.abs() {
+                //     halite_best = halite_remain;
+                //     pos_best = Some(pos_end);
+                //     processed_cell.insert( j );
+                //     break;
+                // }
+                // } else {
+                    halite_best = halite_remain;
+                    pos_best = Some(pos_end);
+                    processed_cell.insert( j );
+                    break;
+                // }
+            }
+        }
+        if pos_best.is_some() {
+            log.log(&format!("agent assigned resource location: {:?}", pos_best.unwrap()));            
+            a.assigned_mine = pos_best;
 
-                        a.assigned_mine = Some( Coord( (y,x) ) );
+            let mut best_dropoff = None;
+            let mut min_dropoff_norm = std::i32::MAX;
+            
+            for (dropoff_id,dropoff_pos) in rawmaps.map_d.get_player_dropoffs(*myid).iter() {
 
-                        //assign a drop off point for the agent
-                        let mut best_dropoff = None;
-                        let mut min_dropoff_norm = std::i32::MAX;
+                let coord_diff = *dropoff_pos - pos_best.unwrap();
 
-                        for (dropoff_id,dropoff_pos) in map_d.get_player_dropoffs(*myid).iter() {
-
-                            let coord_diff = *dropoff_pos - Coord( (y,x) );
-
-                            let diff_norm = (coord_diff.0).0.abs() + (coord_diff.0).1.abs();
-                            if diff_norm < min_dropoff_norm {
-                                min_dropoff_norm = diff_norm;
-                                best_dropoff = Some( *dropoff_pos );
-                            }
-                        }
-                        
-                        a.assigned_dropoff = Some( best_dropoff.unwrap() );
-                        processed = true;
-                        
-                        log.log(&format!("agent after action change: {:?}", a));
-                        if processed {
-                            cell_processed += 1;
-                        }
-                    },
-                    _ => {},
+                let diff_norm = (coord_diff.0).0.abs() + (coord_diff.0).1.abs();
+                if diff_norm < min_dropoff_norm {
+                    min_dropoff_norm = diff_norm;
+                    best_dropoff = Some( *dropoff_pos );
                 }
             }
-            cell_total += 1;
+            
+            a.assigned_dropoff = Some( best_dropoff.unwrap() );
         }
     }
 }
-
-// pub fn plan_strategy_around_dropoff( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut HashMap<usize,Agent>, map_r: & mut ResourceMap, map_d: & mut DropoffMap, map_u: & mut UnitMap ) {
-    
-//     let mut agent_action_change = vec![];
-
-//     //find agents with mine resource amount below a threshold
-//     for (id,a) in player_agents.iter() {
-//         match a.status {
-//             AgentStatus::Idle => {
-//                 agent_action_change.push(*id);
-//             },
-//             AgentStatus::MoveToDropoff =>{
-//                 match a.assigned_mine {
-//                     None => { agent_action_change.push(*id); },
-//                     Some(x) => {
-//                         // let (y,x) = (a.pos).0;
-//                         if let Some(Coord((y,x))) = a.assigned_mine {
-//                             let resource_count = map_r.get( Coord((y, x)) );
-//                             let mut assign_new_mine = false;
-//                             if a.cooldown_movetomine() <= 0 && a.cooldown_mine() <= 0 {
-//                                 assign_new_mine = true;
-//                             }
-//                             if resource_count < 30 && assign_new_mine {
-//                                 let mut rng = rand::thread_rng();                            
-//                                 let num_gen: f32 = rng.gen();
-//                                 if num_gen < 0.9 {
-//                                     agent_action_change.push(*id);
-//                                 }   
-//                             }   
-//                         }
-//                     },
-//                 }
-//             },
-//             _ => {},
-//         }
-//     }
-
-//     let mut agent_idx = 0;
-
-//     let dropoffs = map_d.get_player_dropoffs(*myid);
-//     let num_drop_offs = dropoffs.len();
-
-//     let num_agents_per_dropoff = agent_action_change.len() / num_drop_offs;
-//     let mut count_dropoff = 0;
-    
-//     //assign each associated agent with a new location to mine
-//     'loop_dropoff: for (dropoff_id,dropoff_pos) in dropoffs.iter() {
-        
-//         let dropoff_coord = *dropoff_pos;
-        
-//         let mut p = *dropoff_pos;
-//         let mut step_stop = 2;
-//         let mut p_n = p + Coord( (step_stop/2, step_stop/2 ) );
-//         log.log(&format!("p_n init: {:?}", p_n));
-//         let mut step_count = 0;
-//         #[derive(Clone,Copy)]
-//         enum TraceDir {
-//             L,R,U,D
-//         }
-//         let mut d = TraceDir::U;
-
-//         let mut cell_processed = 0;
-//         let mut cell_total = 0;
-        
-//         while cell_total < map_r.dim().y() * map_r.dim().x() && agent_idx < agent_action_change.len() {
-
-//             let agent_dropoff_partition = agent_idx / num_agents_per_dropoff;
-//             if agent_dropoff_partition > count_dropoff {
-//                 count_dropoff += 1;
-//                 continue 'loop_dropoff;
-//             }
-            
-//             let a_id = &agent_action_change[agent_idx];
-
-//             let mut a = player_agents.get_mut(a_id).expect("agent id not found");
-            
-//             if step_count >= step_stop {
-//                 let new_d = { match d {
-//                     TraceDir::L => { TraceDir::D },
-//                     TraceDir::D => { TraceDir::R },
-//                     TraceDir::R => {
-//                         step_stop += 1;
-//                         p_n = p_n + Coord( ( (step_stop)/2, (step_stop)/2 ) );
-//                         TraceDir::U
-//                     },
-//                     TraceDir::U => { TraceDir::L },
-//                 } };
-//                 d = new_d;
-//                 step_count = 0;
-//             }
-//             match d {
-//                 TraceDir::L => { p_n = p_n + Coord( (0, -1) ); },
-//                 TraceDir::D => { p_n = p_n + Coord( (1, 0 ) ); },
-//                 TraceDir::R => { p_n = p_n + Coord( (0, 1) ); },
-//                 TraceDir::U => { p_n = p_n + Coord( (-1, 0) ); },
-//             };
-            
-//             step_count += 1;
-            
-//             let halite_in_cell = map_r.get( Coord::from( p_n ) );
-
-//             let mut rng = rand::thread_rng();
-//             let num_gen_2: f32 = rng.gen();
-            
-//             if (halite_in_cell >= 750 && num_gen_2 < 0.9 ) ||
-//                 (halite_in_cell >= 500 && halite_in_cell < 750 && num_gen_2 < 0.5) ||
-//                 ( halite_in_cell >= 250 && halite_in_cell < 500 && num_gen_2 < 0.2) ||
-//                 ( halite_in_cell >= 100 && halite_in_cell < 200 && num_gen_2 < 0.01) ||
-//                 ( halite_in_cell < 30 && num_gen_2 < 0.00001 ) {
-//                 match map_u.get( p_n ) {
-//                     Unit::None => {
-//                         let Coord( (y,x) ) = p_n.modulo( &map_r.dim() );
-                        
-//                         let mut processed = false;
-//                         if let AgentStatus::Idle = a.status {
-//                             a.status = AgentStatus::MoveToMine;
-//                             a.reset_cooldown_movetomine();
-//                         }
-
-//                         a.assigned_mine = Some( Coord( (y,x) ) );
-
-//                         //assign a drop off point for the agent
-//                         let mut best_dropoff = None;
-//                         let mut min_dropoff_norm = std::i32::MAX;
-                                           
-//                         for (dropoff_id,dropoff_pos) in map_d.get_player_dropoffs( *myid ).iter() {
-
-//                             let coord_diff = *dropoff_pos - Coord( (y,x) );
-
-//                             let diff_norm = (coord_diff.0).0.abs() + (coord_diff.0).1.abs();
-//                             if diff_norm < min_dropoff_norm {
-//                                 min_dropoff_norm = diff_norm;
-//                                 best_dropoff = Some( *dropoff_pos );
-//                             }
-//                         }
-                        
-//                         a.assigned_dropoff = Some( best_dropoff.unwrap() );
-//                         processed = true;
-//                         agent_idx += 1;
-                        
-//                         log.log(&format!("agent after action change: {:?}", a));
-//                         if processed {
-//                             cell_processed += 1;
-//                         }
-//                     },
-//                     _ => {},
-//                 }
-//             }
-//             cell_total += 1;
-//         }
-//         count_dropoff += 1;
-//     }
-// }
 
 pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >,
                                    my_id: &usize,
@@ -766,7 +622,7 @@ pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >
                                    is_end_game: &bool ) -> bool {
 
     let my_shipyard_pos = shipyard_pos.get( my_id ).expect("shipyard position not found");
-    
+
     let pos_empty = if let Unit::None = rawmaps.map_u.get( *my_shipyard_pos ) {
         true
     } else {
@@ -779,11 +635,12 @@ pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >
             if stats.score > 1000 &&
                 pos_empty &&
                 !*is_end_game &&
-                ( stats.ships == 0 || 
-                   ( rawmaps.map_r.total_remain() as f32 / stats.ships as f32 > 6000.
-                     && ( *turn_num <= (*max_turn * 7 ) / 10 )
+                  ( stats.ships == 0 || 
+                   ( rawmaps.map_r.total_remain() as f32 / stats.ships as f32 > 6200.
+                     && ( *turn_num <= (*max_turn * 62 ) / 100 )
                    )
-                ) {
+            )
+            {
                     true
                 } else {
                     false
@@ -795,8 +652,98 @@ pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >
     create
 }
 
-pub fn determine_create_dropoff( log: & mut hlt::log::Log, myid: &usize, player_agents: & mut HashMap<i32,Agent>, map_r: &ResourceMap, map_d: &DropoffMap, map_u: &UnitMap ) {
-    
-}
+pub fn determine_create_dropoff( log: & mut hlt::log::Log,
+                                 player_stats: &HashMap< Player, PlayerStats >,
+                                 myid: &usize,
+                                 my_agents: & mut HashMap<i32,Agent>,
+                                 rawmaps: & mut RawMaps,
+                                 turn_num: &usize,
+                                 max_turn: &usize,
+                                 is_end_game: &bool ) -> Option<i32> {
 
+    let mut create = false;
+    match player_stats.get( &Player(*myid) ) {
+        Some(stats) => {
+
+            if stats.score > 5000 &&
+                !*is_end_game &&
+                stats.ships > 0 {
+                    create = true;
+                }
+        },
+        _ => {},
+    }
+
+    if !create {
+        return None
+    }
+    
+    let mydropoffs = rawmaps.map_d.get_player_dropoffs( *myid );
+    let agent_dropoff_density = my_agents.len() as f32 / mydropoffs.len() as f32;
+
+    let mut in_process = false;
+    for (id,agent) in my_agents.iter() {
+        match agent.status {
+            AgentStatus::CreateDropoff => {
+                in_process = true;
+                break;
+            },
+            _ => {},
+        }
+    }
+    if in_process {
+        return None
+    }
+    
+    if agent_dropoff_density > 10. {
+        
+        let kernel_dim = 20;
+
+        //find suitable resource locations
+        let best_locs = find_resource_to_mine( & mut log.borrow_mut(),
+                                                 myid, my_agents,
+                                                 rawmaps, kernel_dim );
+
+        let mut new_dropoff_pos = None;
+        
+        for (candidate_pos) in best_locs.iter() {
+            let mut valid = true;
+            for (id,dropoff_pos) in mydropoffs.iter() {
+                let dist = candidate_pos.diff_wrap_around( dropoff_pos, &rawmaps.map_d.dim() ).abs();
+                if dist < 25 {
+                    valid = false;
+                }
+            }
+            if valid {
+                new_dropoff_pos = Some( *candidate_pos );
+                break;
+            }
+        }
+        
+        let mut selected_id = None;
+        
+        match new_dropoff_pos {
+            Some(pos) => {
+                let mut min_dist = std::i32::MAX;
+                for (id,agent) in my_agents.iter_mut() {
+                    let dist = pos.diff_wrap_around( &agent.pos, &rawmaps.map_d.dim() ).abs();
+                    if min_dist > dist {
+                        min_dist = dist;
+                        selected_id = Some(*id);
+                    }
+                }
+            },
+            _ => {},
+        }
+
+        if let Some(id) = selected_id {
+            let a = my_agents.get_mut(&id).unwrap();
+            a.create_dropoff = new_dropoff_pos;
+            a.status = AgentStatus::CreateDropoff;
+            return Some(id)
+        }
+    }
+
+    None
+}
 
