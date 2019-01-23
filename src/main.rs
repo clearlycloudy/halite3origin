@@ -356,6 +356,7 @@ fn main() {
         
         let create_new_agent = determine_create_new_agent( & player_stats,
                                                              & my_id,
+                                                             agents.get_mut( &Player( my_id ) ).unwrap(),
                                                              & rawmaps,
                                                              & shipyard_pos,
                                                              & turn_num,

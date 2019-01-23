@@ -520,6 +520,20 @@ pub fn assign_agents_to_mine( log: & mut hlt::log::Log, myid: &usize, player_age
                 agent_action_change.push(*id);
                 a.status = AgentStatus::MoveToMine;
             },
+            AgentStatus::MoveToDropoff => {
+                let mut best_dropoff = None;
+                let mut min_dropoff_norm = std::i32::MAX;
+                for (dropoff_id,dropoff_pos) in rawmaps.map_d.get_player_dropoffs(*myid).iter() {
+
+                    let coord_diff = dropoff_pos.diff_wrap_around( &a.pos, &rawmaps.map_d.dim() ).abs();
+
+                    if coord_diff < min_dropoff_norm {
+                        min_dropoff_norm = coord_diff;
+                        best_dropoff = Some( *dropoff_pos );
+                    }
+                }
+                a.assigned_dropoff = Some( best_dropoff.unwrap() );
+            }
             _ => {},
         }
     }
@@ -615,6 +629,7 @@ pub fn assign_agents_to_mine( log: & mut hlt::log::Log, myid: &usize, player_age
 
 pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >,
                                    my_id: &usize,
+                                   my_agents: & mut HashMap<i32,Agent>,
                                    rawmaps: &RawMaps,
                                    shipyard_pos: &HashMap<usize,Coord>,
                                    turn_num: &usize,
@@ -628,7 +643,13 @@ pub fn determine_create_new_agent( player_stats: &HashMap< Player, PlayerStats >
     } else {
         false
     };
-        
+
+    let mydropoffs = rawmaps.map_d.get_player_dropoffs( *my_id );
+    let agent_dropoff_density = my_agents.len() as f32 / mydropoffs.len() as f32;
+    if agent_dropoff_density > 10. {
+        return false
+    }
+    
     let create = match player_stats.get( &Player(*my_id) ) {
         Some(stats) => {
 
@@ -706,7 +727,7 @@ pub fn determine_create_dropoff( log: & mut hlt::log::Log,
 
         let mut new_dropoff_pos = None;
         
-        for (candidate_pos) in best_locs.iter() {
+        for candidate_pos in best_locs.iter() {
             let mut valid = true;
             for (id,dropoff_pos) in mydropoffs.iter() {
                 let dist = candidate_pos.diff_wrap_around( dropoff_pos, &rawmaps.map_d.dim() ).abs();
